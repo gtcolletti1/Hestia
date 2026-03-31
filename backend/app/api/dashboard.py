@@ -1,6 +1,5 @@
 """API routes for the Dashboard composite endpoint."""
 
-from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, time, timezone

@@ -1,9 +1,8 @@
 """Pydantic v2 schemas for the Dashboard composite endpoint."""
 
-from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+import datetime as dt
 
 from pydantic import BaseModel, ConfigDict
 
@@ -24,8 +23,8 @@ class EventSummary(BaseModel):
 
     id: uuid.UUID
     title: str
-    start_time: datetime
-    end_time: datetime
+    start_time: dt.datetime
+    end_time: dt.datetime
     color: str | None = None
     profile_name: str | None = None
     location: str | None = None
@@ -46,7 +45,7 @@ class ActiveListSummary(BaseModel):
 
 
 class DashboardResponse(BaseModel):
-    date: date
+    date: dt.date
     profiles: list[ProfileSummary]
     agenda: list[AgendaBucket]
     active_routines: list[dict]

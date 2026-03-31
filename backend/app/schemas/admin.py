@@ -1,6 +1,5 @@
 """Pydantic v2 schemas for Admin / Household settings."""
 
-from __future__ import annotations
 
 from pydantic import BaseModel
 

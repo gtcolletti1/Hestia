@@ -1,6 +1,5 @@
 """API routes for Meal Plans."""
 
-from __future__ import annotations
 
 import uuid
 from datetime import date, timedelta

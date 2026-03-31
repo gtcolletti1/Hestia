@@ -1,6 +1,5 @@
 """API routes for integration management (OAuth flows, sync triggers, status)."""
 
-from __future__ import annotations
 
 import logging
 import uuid

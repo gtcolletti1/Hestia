@@ -1,6 +1,5 @@
-from __future__ import annotations
 import uuid
-from datetime import datetime
+import datetime as dt
 
 from pydantic import BaseModel, ConfigDict
 
@@ -35,8 +34,8 @@ class ProfileResponse(ProfileBase):
     id: uuid.UUID
     household_id: uuid.UUID
     is_active: bool
-    created_at: datetime
-    updated_at: datetime
+    created_at: dt.datetime
+    updated_at: dt.datetime
 
 
 # ── Household schemas ────────────────────────────────────────────────────────
@@ -54,6 +53,6 @@ class HouseholdResponse(HouseholdBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    created_at: datetime
-    updated_at: datetime
+    created_at: dt.datetime
+    updated_at: dt.datetime
     profiles: list[ProfileResponse] = []

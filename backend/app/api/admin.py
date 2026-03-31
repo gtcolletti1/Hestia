@@ -1,6 +1,5 @@
 """API routes for Admin / Household settings."""
 
-from __future__ import annotations
 
 import uuid
 

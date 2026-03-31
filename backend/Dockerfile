@@ -8,6 +8,8 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY pyproject.toml ./
+COPY app/ ./app/
+
 RUN pip install --no-cache-dir .
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────

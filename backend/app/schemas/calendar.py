@@ -1,6 +1,5 @@
-from __future__ import annotations
 import uuid
-from datetime import date, datetime
+import datetime as dt
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,8 +13,8 @@ class EventBase(BaseModel):
     title: str
     description: str | None = None
     location: str | None = None
-    start_time: datetime
-    end_time: datetime
+    start_time: dt.datetime
+    end_time: dt.datetime
     all_day: bool = False
     recurrence_rule: str | None = None
     color: str | None = None
@@ -31,8 +30,8 @@ class EventUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
     location: str | None = None
-    start_time: datetime | None = None
-    end_time: datetime | None = None
+    start_time: dt.datetime | None = None
+    end_time: dt.datetime | None = None
     all_day: bool | None = None
     recurrence_rule: str | None = None
     color: str | None = None
@@ -48,8 +47,8 @@ class EventResponse(EventBase):
     source_calendar_id: uuid.UUID
     profile_id: uuid.UUID | None
     external_id: str | None
-    created_at: datetime
-    updated_at: datetime
+    created_at: dt.datetime
+    updated_at: dt.datetime
 
 
 # ── SourceCalendar schemas ───────────────────────────────────────────────────
@@ -84,16 +83,16 @@ class SourceCalendarResponse(SourceCalendarBase):
     profile_id: uuid.UUID | None
     external_id: str | None
     sync_token: str | None
-    last_synced_at: datetime | None
-    created_at: datetime
-    updated_at: datetime
+    last_synced_at: dt.datetime | None
+    created_at: dt.datetime
+    updated_at: dt.datetime
 
 
 # ── Query helpers ────────────────────────────────────────────────────────────
 
 
 class CalendarQuery(BaseModel):
-    start_date: date
-    end_date: date
+    start_date: dt.date
+    end_date: dt.date
     profile_ids: list[uuid.UUID] | None = None
     source_calendar_ids: list[uuid.UUID] | None = None

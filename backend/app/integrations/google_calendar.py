@@ -1,6 +1,5 @@
 """Google Calendar API integration using httpx."""
 
-from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone

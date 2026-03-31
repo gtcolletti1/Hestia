@@ -1,6 +1,5 @@
-from __future__ import annotations
 import uuid
-from datetime import date, datetime
+import datetime as dt
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,7 +13,7 @@ class ListItemBase(BaseModel):
     text: str
     is_checked: bool = False
     sort_order: int = 0
-    due_date: date | None = None
+    due_date: dt.date | None = None
 
 
 class ListItemCreate(ListItemBase):
@@ -25,7 +24,7 @@ class ListItemUpdate(BaseModel):
     text: str | None = None
     is_checked: bool | None = None
     sort_order: int | None = None
-    due_date: date | None = None
+    due_date: dt.date | None = None
     assigned_profile_id: uuid.UUID | None = None
 
 
@@ -35,8 +34,8 @@ class ListItemResponse(ListItemBase):
     id: uuid.UUID
     list_id: uuid.UUID
     assigned_profile_id: uuid.UUID | None = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: dt.datetime
+    updated_at: dt.datetime
 
 
 # ── Task Lists ───────────────────────────────────────────────────────────────
@@ -70,8 +69,8 @@ class TaskListResponse(TaskListBase):
     items: list[ListItemResponse] = []
     item_count: int = 0
     checked_count: int = 0
-    created_at: datetime
-    updated_at: datetime
+    created_at: dt.datetime
+    updated_at: dt.datetime
 
 
 # ── Reorder payload ──────────────────────────────────────────────────────────

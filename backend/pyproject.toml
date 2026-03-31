@@ -29,7 +29,7 @@ dev = [
 ]
 
 [project.scripts]
-serve = "uvicorn app.main:app"
+serve = "app.main:run"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

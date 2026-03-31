@@ -6,7 +6,6 @@ The helpers below implement a lightweight manual parser sufficient for
 common VEVENT properties.
 """
 
-from __future__ import annotations
 
 import logging
 import re

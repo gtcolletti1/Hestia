@@ -1,6 +1,5 @@
-from __future__ import annotations
 import uuid
-from datetime import date, datetime, time
+import datetime as dt
 
 from pydantic import BaseModel, ConfigDict
 
@@ -33,7 +32,7 @@ class RoutineBase(BaseModel):
     name: str
     time_block: TimeBlock
     days_of_week: list[int]
-    start_time: time | None = None
+    start_time: dt.time | None = None
     is_active: bool = True
 
 
@@ -47,7 +46,7 @@ class RoutineUpdate(BaseModel):
     name: str | None = None
     time_block: TimeBlock | None = None
     days_of_week: list[int] | None = None
-    start_time: time | None = None
+    start_time: dt.time | None = None
     is_active: bool | None = None
     sort_order: int | None = None
     profile_id: uuid.UUID | None = None
@@ -62,8 +61,8 @@ class RoutineResponse(RoutineBase):
     profile_id: uuid.UUID | None = None
     sort_order: int
     steps: list[RoutineStepResponse] = []
-    created_at: datetime
-    updated_at: datetime
+    created_at: dt.datetime
+    updated_at: dt.datetime
 
 
 # ── Completions ──────────────────────────────────────────────────────────────
@@ -77,7 +76,7 @@ class RoutineCompletionBase(BaseModel):
 class RoutineCompletionCreate(BaseModel):
     routine_id: uuid.UUID
     profile_id: uuid.UUID
-    date: date
+    date: dt.date
 
 
 class RoutineCompletionResponse(RoutineCompletionBase):
@@ -86,9 +85,9 @@ class RoutineCompletionResponse(RoutineCompletionBase):
     id: uuid.UUID
     routine_id: uuid.UUID
     profile_id: uuid.UUID
-    date: date
-    completed_at: datetime | None = None
-    created_at: datetime
+    date: dt.date
+    completed_at: dt.datetime | None = None
+    created_at: dt.datetime
 
 
 # ── Streak ───────────────────────────────────────────────────────────────────

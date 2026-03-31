@@ -4,7 +4,6 @@ Handles pulling events from external providers into the local database
 and pushing local changes back out.
 """
 
-from __future__ import annotations
 
 import logging
 import uuid
