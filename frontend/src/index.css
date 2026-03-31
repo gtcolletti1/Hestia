@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+:root {
+  --color-accent: #3b82f6;
+  --color-accent-light: #60a5fa;
+}
+
+.dark {
+  --color-accent: #60a5fa;
+  --color-accent-light: #93c5fd;
+}
+
+/* Touch-optimized tap targets (Apple HIG minimum) */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Kiosk mode: prevent text selection on non-input elements */
+.kiosk-wrapper {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.kiosk-wrapper input,
+.kiosk-wrapper textarea,
+.kiosk-wrapper [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}

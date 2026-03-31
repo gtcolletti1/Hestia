@@ -1,0 +1,142 @@
+"""API routes for Meal Plans."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import get_db
+from app.models.meal import MealPlan
+from app.schemas.meal import (
+    DayMeals,
+    MealPlanCreate,
+    MealPlanResponse,
+    MealPlanUpdate,
+    WeeklyMealView,
+)
+
+router = APIRouter(tags=["meals"])
+
+
+@router.get("/meals", response_model=list[MealPlanResponse])
+async def list_meals(
+    household_id: uuid.UUID,
+    date: date | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+) -> list[MealPlanResponse]:
+    """Return meals for a single day or a date range."""
+    stmt = select(MealPlan).where(MealPlan.household_id == household_id)
+
+    if date is not None:
+        stmt = stmt.where(MealPlan.date == date)
+    else:
+        if start_date is not None:
+            stmt = stmt.where(MealPlan.date >= start_date)
+        if end_date is not None:
+            stmt = stmt.where(MealPlan.date <= end_date)
+
+    stmt = stmt.order_by(MealPlan.date, MealPlan.meal_type)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+@router.get("/meals/week", response_model=WeeklyMealView)
+async def get_weekly_meals(
+    household_id: uuid.UUID,
+    week_start: date = Query(...),
+    db: AsyncSession = Depends(get_db),
+) -> WeeklyMealView:
+    """Return a structured weekly meal view (7 days starting from week_start)."""
+    week_end = week_start + timedelta(days=6)
+
+    stmt = (
+        select(MealPlan)
+        .where(
+            MealPlan.household_id == household_id,
+            MealPlan.date >= week_start,
+            MealPlan.date <= week_end,
+        )
+        .order_by(MealPlan.date, MealPlan.meal_type)
+    )
+    result = await db.execute(stmt)
+    meals = result.scalars().all()
+
+    meals_by_date: dict[date, list] = {}
+    for m in meals:
+        meals_by_date.setdefault(m.date, []).append(m)
+
+    days = [
+        DayMeals(
+            date=week_start + timedelta(days=i),
+            meals=meals_by_date.get(week_start + timedelta(days=i), []),
+        )
+        for i in range(7)
+    ]
+
+    return WeeklyMealView(week_start=week_start, days=days)
+
+
+@router.get("/meals/{meal_id}", response_model=MealPlanResponse)
+async def get_meal(
+    meal_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> MealPlanResponse:
+    """Get a single meal plan by id."""
+    result = await db.execute(select(MealPlan).where(MealPlan.id == meal_id))
+    meal = result.scalar_one_or_none()
+    if meal is None:
+        raise HTTPException(status_code=404, detail="Meal plan not found")
+    return meal
+
+
+@router.post("/meals", response_model=MealPlanResponse, status_code=201)
+async def create_meal(
+    payload: MealPlanCreate,
+    db: AsyncSession = Depends(get_db),
+) -> MealPlanResponse:
+    """Create a new meal plan."""
+    meal = MealPlan(**payload.model_dump())
+    db.add(meal)
+    await db.flush()
+    await db.refresh(meal)
+    return meal
+
+
+@router.put("/meals/{meal_id}", response_model=MealPlanResponse)
+async def update_meal(
+    meal_id: uuid.UUID,
+    payload: MealPlanUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> MealPlanResponse:
+    """Update an existing meal plan."""
+    result = await db.execute(select(MealPlan).where(MealPlan.id == meal_id))
+    meal = result.scalar_one_or_none()
+    if meal is None:
+        raise HTTPException(status_code=404, detail="Meal plan not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(meal, field, value)
+
+    await db.flush()
+    await db.refresh(meal)
+    return meal
+
+
+@router.delete("/meals/{meal_id}", status_code=204)
+async def delete_meal(
+    meal_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a meal plan."""
+    result = await db.execute(select(MealPlan).where(MealPlan.id == meal_id))
+    meal = result.scalar_one_or_none()
+    if meal is None:
+        raise HTTPException(status_code=404, detail="Meal plan not found")
+    await db.delete(meal)
+    await db.flush()

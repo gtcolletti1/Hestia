@@ -1,0 +1,25 @@
+[Unit]
+Description=Family Hub Kiosk (Chromium)
+After=network-online.target graphical.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Environment=DISPLAY=:0
+ExecStart=/usr/bin/chromium-browser \
+    --kiosk \
+    --noerrdialogs \
+    --disable-translate \
+    --no-first-run \
+    --fast \
+    --fast-start \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-component-update \
+    http://localhost
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
