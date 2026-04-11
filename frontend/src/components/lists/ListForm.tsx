@@ -1,7 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import client from "@/api/client";
-import type { List } from "./ListView";
+import { lists as listsApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
+import type { TaskList } from "@/types";
+
+type List = TaskList;
 
 const CATEGORY_OPTIONS = [
   { value: "grocery", label: "Grocery", icon: "🛒" },
@@ -25,6 +28,7 @@ interface Props {
 
 export default function ListForm({ list, onClose, onSaved }: Props) {
   const queryClient = useQueryClient();
+  const householdId = useHouseholdStore((s) => s.householdId);
   const isEditing = !!list;
 
   const [name, setName] = useState(list?.name ?? "");
@@ -34,9 +38,9 @@ export default function ListForm({ list, onClose, onSaved }: Props) {
   const saveMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
       if (isEditing) {
-        return client.put(`/lists/${list.id}`, payload);
+        return listsApi.update(list.id, payload);
       }
-      return client.post("/lists", payload);
+      return listsApi.create({ ...payload, household_id: householdId! });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lists"] });

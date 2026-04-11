@@ -41,8 +41,9 @@ export default function MealPlanner() {
     mealType?: MealPlan["meal_type"];
   }>({ open: false });
 
-  const weekStartStr = format(weekStart, "yyyy-MM-dd");
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+  const weekStartStr = format(weekStart, "yyyy-MM-dd");
+  const weekEndStr = format(weekEnd, "yyyy-MM-dd");
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -50,9 +51,14 @@ export default function MealPlanner() {
   );
 
   const { data: mealsData = [] } = useQuery({
-    queryKey: ["meals", "weekly", householdId, weekStartStr],
+    queryKey: ["meals", "weekly", householdId, weekStartStr, weekEndStr],
     queryFn: () =>
-      meals.getWeekly(householdId!, weekStartStr).then((r) => r.data),
+      meals
+        .getAll(householdId!, {
+          start_date: weekStartStr,
+          end_date: weekEndStr,
+        })
+        .then((r) => r.data),
     enabled: !!householdId,
   });
 

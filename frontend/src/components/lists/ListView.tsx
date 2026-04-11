@@ -1,31 +1,16 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import client from "@/api/client";
+import { lists as listsApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
+import type { TaskList, ListItem } from "@/types";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
 import Modal from "@/components/shared/Modal";
 import ListDetail from "./ListDetail";
 import ListForm from "./ListForm";
 
-// ── Local types (no shared @/types yet) ──
-
-export interface ListItem {
-  id: string;
-  text: string;
-  is_checked: boolean;
-  sort_order: number;
-  profile_id?: string;
-  profile_name?: string;
-  due_date?: string;
-}
-
-export interface List {
-  id: string;
-  name: string;
-  icon?: string;
-  category: string;
-  items: ListItem[];
-}
+export type { ListItem };
+export type List = TaskList;
 
 export const LIST_CATEGORIES = [
   { value: "all", label: "All", icon: "📋" },
@@ -39,6 +24,7 @@ export const LIST_CATEGORIES = [
 
 export default function ListView() {
   const queryClient = useQueryClient();
+  const householdId = useHouseholdStore((s) => s.householdId);
   const [activeCategory, setActiveCategory] = useState("all");
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -49,14 +35,16 @@ export default function ListView() {
     isLoading,
     error,
   } = useQuery<List[]>({
-    queryKey: ["lists"],
-    queryFn: async () => (await client.get("/lists")).data,
+    queryKey: ["lists", householdId, activeCategory === "all" ? undefined : activeCategory],
+    queryFn: async () =>
+      (await listsApi.getAll(
+        householdId!,
+        activeCategory === "all" ? undefined : { category: activeCategory },
+      )).data,
+    enabled: !!householdId,
   });
 
-  const filteredLists =
-    activeCategory === "all"
-      ? lists
-      : lists.filter((l) => l.category === activeCategory);
+  const filteredLists = lists;
 
   const selectedList = lists.find((l) => l.id === selectedListId) ?? null;
 

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import client from "@/api/client";
-import type { Routine, RoutineStep } from "./RoutineList";
+import { routines as routinesApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
+import type { Routine, RoutineStep } from "@/types";
 import StreakDisplay from "./StreakDisplay";
 
 interface Props {
@@ -11,11 +12,15 @@ interface Props {
 
 export default function RoutineStepper({ routine, onClose }: Props) {
   const queryClient = useQueryClient();
+  const profiles = useHouseholdStore((s) => s.profiles);
+  const [selectedProfileId, setSelectedProfileId] = useState(
+    routine.profile_id ?? profiles[0]?.id ?? "",
+  );
   const [steps, setSteps] = useState<(RoutineStep & { completed: boolean })[]>(
     () =>
       [...routine.steps]
         .sort((a, b) => a.sort_order - b.sort_order)
-        .map((s) => ({ ...s, completed: s.completed ?? false })),
+        .map((s) => ({ ...s, completed: false })),
   );
   const [showCelebration, setShowCelebration] = useState(false);
 
@@ -28,16 +33,8 @@ export default function RoutineStepper({ routine, onClose }: Props) {
   }, [allDone]);
 
   const toggleStep = useMutation({
-    mutationFn: async ({
-      stepId,
-      completed,
-    }: {
-      stepId: string;
-      completed: boolean;
-    }) =>
-      client.post(`/routines/${routine.id}/steps/${stepId}/complete`, {
-        completed,
-      }),
+    mutationFn: async ({ stepId }: { stepId: string }) =>
+      routinesApi.completeStep(routine.id, stepId, selectedProfileId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["routines"] });
       queryClient.invalidateQueries({
@@ -52,10 +49,7 @@ export default function RoutineStepper({ routine, onClose }: Props) {
         s.id === stepId ? { ...s, completed: !s.completed } : s,
       ),
     );
-    const step = steps.find((s) => s.id === stepId);
-    if (step) {
-      toggleStep.mutate({ stepId, completed: !step.completed });
-    }
+    toggleStep.mutate({ stepId });
   };
 
   return (
@@ -84,6 +78,31 @@ export default function RoutineStepper({ routine, onClose }: Props) {
         <h1 className="text-lg font-bold">{routine.name}</h1>
         <div className="w-11" />
       </div>
+
+      {/* Profile selector */}
+      {profiles.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto px-4 py-2">
+          {profiles.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setSelectedProfileId(p.id)}
+              className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition active:scale-95 ${
+                selectedProfileId === p.id
+                  ? "bg-blue-600 text-white shadow"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300"
+              }`}
+            >
+              <span
+                className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                style={{ backgroundColor: p.color ?? "#8b5cf6" }}
+              >
+                {p.name.charAt(0)}
+              </span>
+              {p.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Progress bar */}
       <div className="px-4 py-3">
@@ -176,7 +195,7 @@ export default function RoutineStepper({ routine, onClose }: Props) {
 
         {/* Streak */}
         <div className="mt-6">
-          <StreakDisplay routineId={routine.id} />
+          <StreakDisplay routineId={routine.id} profileId={selectedProfileId} />
         </div>
       </div>
     </div>

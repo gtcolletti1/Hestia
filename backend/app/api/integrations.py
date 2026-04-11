@@ -46,7 +46,7 @@ async def google_authorize(
         "state": str(household_id),
     }
     url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
-    return {"authorization_url": url}
+    return {"url": url}
 
 
 @router.get("/integrations/oauth/google/callback")
@@ -140,7 +140,7 @@ async def microsoft_authorize(
         "state": str(household_id),
     }
     url = f"{MICROSOFT_AUTH_URL}?{urlencode(params)}"
-    return {"authorization_url": url}
+    return {"url": url}
 
 
 @router.get("/integrations/oauth/microsoft/callback")
@@ -281,7 +281,8 @@ async def integration_status(
     ]
 
     return {
-        "household_id": str(household_id),
+        "google": providers.get("google", {}).get("connected", False),
+        "microsoft": providers.get("microsoft", {}).get("connected", False),
         "providers": providers,
         "calendars": calendar_summary,
     }

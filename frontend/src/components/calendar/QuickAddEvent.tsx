@@ -1,20 +1,21 @@
 import { useState, useCallback } from "react";
 import { format } from "date-fns";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import client from "@/api/client";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { events as eventsApi, calendars } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
 
 interface QuickAddEventProps {
   onClose: () => void;
   defaultDate?: Date;
-  profiles?: { id: string; name: string; color: string }[];
 }
 
 export default function QuickAddEvent({
   onClose,
   defaultDate = new Date(),
-  profiles = [],
 }: QuickAddEventProps) {
   const queryClient = useQueryClient();
+  const householdId = useHouseholdStore((s) => s.householdId);
+  const profiles = useHouseholdStore((s) => s.profiles);
   const todayStr = format(defaultDate, "yyyy-MM-dd");
 
   const [title, setTitle] = useState("");
@@ -23,13 +24,26 @@ export default function QuickAddEvent({
   const [endTime, setEndTime] = useState("10:00");
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? "");
 
+  const { data: calendarList = [], isLoading: calendarsLoading } = useQuery({
+    queryKey: ["calendars", householdId],
+    queryFn: async () => {
+      const res = await calendars.getAll(householdId!);
+      return res.data as { id: string; name: string }[];
+    },
+    enabled: !!householdId,
+  });
+
+  const sourceCalendarId = calendarList[0]?.id;
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      await client.post("/events", {
+      await eventsApi.create({
         title,
-        start: `${date}T${startTime}`,
-        end: `${date}T${endTime}`,
-        profile_id: profileId,
+        start_time: `${date}T${startTime}`,
+        end_time: `${date}T${endTime}`,
+        profile_id: profileId || undefined,
+        source_calendar_id: sourceCalendarId!,
+        all_day: false,
       });
     },
     onSuccess: () => {
@@ -42,10 +56,10 @@ export default function QuickAddEvent({
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      if (!title.trim()) return;
+      if (!title.trim() || !sourceCalendarId) return;
       createMutation.mutate();
     },
-    [title, createMutation],
+    [title, sourceCalendarId, createMutation],
   );
 
   return (
@@ -61,6 +75,12 @@ export default function QuickAddEvent({
         onSubmit={handleSubmit}
       >
         <h2 className="text-lg font-bold">Quick Add Event</h2>
+
+        {!calendarsLoading && !sourceCalendarId && (
+          <p className="text-sm text-amber-600 dark:text-amber-400">
+            Create a calendar first before adding events.
+          </p>
+        )}
 
         <input
           type="text"
@@ -117,7 +137,7 @@ export default function QuickAddEvent({
         <div className="flex gap-3 pt-2">
           <button
             type="submit"
-            disabled={createMutation.isPending || !title.trim()}
+            disabled={createMutation.isPending || !title.trim() || !sourceCalendarId}
             className="min-h-[44px] flex-1 rounded-lg bg-blue-600 text-white font-medium px-4 py-3 hover:bg-blue-700 disabled:opacity-50"
           >
             {createMutation.isPending ? "Adding…" : "Add Event"}

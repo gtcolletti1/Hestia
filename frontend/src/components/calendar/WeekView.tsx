@@ -11,8 +11,10 @@ import {
   isSameDay,
   isToday,
 } from "date-fns";
-import client from "@/api/client";
+import { events as eventsApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
 import type { CalendarEvent } from "./types";
+import { mapEventToCalendarEvent } from "./types";
 import EventModal from "./EventModal";
 
 interface WeekViewProps {
@@ -29,18 +31,22 @@ export default function WeekView({ date }: WeekViewProps) {
   const weekStart = startOfWeek(date, { weekStartsOn: 0 });
   const weekEnd = addDays(weekStart, 6);
 
-  const { data: events = [], isLoading } = useQuery<CalendarEvent[]>({
-    queryKey: ["events", "week", format(weekStart, "yyyy-MM-dd")],
+  const householdId = useHouseholdStore((s) => s.householdId);
+  const storeProfiles = useHouseholdStore((s) => s.profiles);
+
+  const { data: rawEvents = [], isLoading } = useQuery({
+    queryKey: ["events", "week", format(weekStart, "yyyy-MM-dd"), householdId],
     queryFn: async () => {
-      const res = await client.get<CalendarEvent[]>("/events", {
-        params: {
-          start: format(weekStart, "yyyy-MM-dd'T'00:00:00"),
-          end: format(weekEnd, "yyyy-MM-dd'T'23:59:59"),
-        },
+      const res = await eventsApi.getAll(householdId!, {
+        start_date: format(weekStart, "yyyy-MM-dd"),
+        end_date: format(weekEnd, "yyyy-MM-dd"),
       });
       return res.data;
     },
+    enabled: !!householdId,
   });
+
+  const events = rawEvents.map((ev) => mapEventToCalendarEvent(ev, storeProfiles));
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => START_HOUR + i);

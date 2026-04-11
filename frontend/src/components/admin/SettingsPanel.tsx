@@ -1,14 +1,16 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import client from "@/api/client";
+import { admin, integrations as integrationsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
-import { getTheme, setTheme, type Theme } from "@/utils/theme";
+import { useThemeStore } from "@/stores/themeStore";
+
+type Theme = "light" | "dark";
 
 interface HouseholdSettings {
-  household_name: string;
+  name: string;
   theme: Theme;
   accent_color: string;
-  modules: {
+  modules_enabled: {
     calendar: boolean;
     routines: boolean;
     lists: boolean;
@@ -17,18 +19,16 @@ interface HouseholdSettings {
   privacy_mode: boolean;
 }
 
-interface Integration {
-  id: string;
-  name: string;
-  icon: string;
-  connected: boolean;
+interface IntegrationStatus {
+  google: boolean;
+  microsoft: boolean;
 }
 
 const DEFAULT_SETTINGS: HouseholdSettings = {
-  household_name: "My Family",
-  theme: getTheme(),
-  accent_color: "#3B82F6",
-  modules: {
+  name: "My Family",
+  theme: useThemeStore.getState().theme,
+  accent_color: useThemeStore.getState().accentColor,
+  modules_enabled: {
     calendar: true,
     routines: true,
     lists: true,
@@ -48,35 +48,31 @@ const ACCENT_COLORS = [
   "#06B6D4",
 ];
 
-const INITIAL_INTEGRATIONS: Integration[] = [
-  { id: "google-calendar", name: "Google Calendar", icon: "📅", connected: false },
-  { id: "outlook", name: "Outlook", icon: "📧", connected: false },
-  { id: "ical", name: "iCal", icon: "🗓️", connected: false },
-  { id: "todoist", name: "Todoist", icon: "✅", connected: false },
-  { id: "ms-todo", name: "MS To Do", icon: "☑️", connected: false },
-  { id: "weather", name: "Weather", icon: "🌤️", connected: false },
-];
-
 export default function SettingsPanel() {
   const householdId = useHouseholdStore((s) => s.householdId);
   const queryClient = useQueryClient();
-
   const { data: settings } = useQuery({
     queryKey: ["settings", householdId],
     queryFn: () =>
-      client
-        .get<HouseholdSettings>(`/admin/settings`, {
-          params: { household_id: householdId },
-        })
-        .then((r) => r.data)
+      admin
+        .getSettings(householdId!)
+        .then((r) => r.data as HouseholdSettings)
         .catch(() => DEFAULT_SETTINGS),
     enabled: !!householdId,
     initialData: DEFAULT_SETTINGS,
   });
 
+  const { data: integrationStatus } = useQuery({
+    queryKey: ["integrations", "status", householdId],
+    queryFn: () =>
+      integrationsApi
+        .getStatus(householdId!)
+        .then((r) => r.data as IntegrationStatus)
+        .catch(() => ({ google: false, microsoft: false })),
+    enabled: !!householdId,
+  });
+
   const [form, setForm] = useState<HouseholdSettings>(settings);
-  const [integrations, setIntegrations] =
-    useState<Integration[]>(INITIAL_INTEGRATIONS);
 
   useEffect(() => {
     setForm(settings);
@@ -84,10 +80,15 @@ export default function SettingsPanel() {
 
   const saveMutation = useMutation({
     mutationFn: (data: HouseholdSettings) =>
-      client.put(`/admin/settings`, {
-        ...data,
-        household_id: householdId,
-      }),
+      admin.updateSettings(householdId!, data as unknown as Record<string, unknown>),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
+  const moduleMutation = useMutation({
+    mutationFn: (data: { module: string; enabled: boolean }) =>
+      admin.toggleModule(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
@@ -98,24 +99,44 @@ export default function SettingsPanel() {
   };
 
   const updateModules = (
-    key: keyof HouseholdSettings["modules"],
+    key: keyof HouseholdSettings["modules_enabled"],
     value: boolean,
   ) => {
     setForm((prev) => ({
       ...prev,
-      modules: { ...prev.modules, [key]: value },
+      modules_enabled: { ...prev.modules_enabled, [key]: value },
     }));
+    moduleMutation.mutate({ module: key, enabled: value });
   };
 
   const handleThemeChange = (theme: Theme) => {
     setForm((prev) => ({ ...prev, theme }));
-    setTheme(theme);
+    useThemeStore.getState().setTheme(theme);
   };
 
-  const toggleIntegration = (id: string) => {
-    setIntegrations((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, connected: !i.connected } : i)),
-    );
+  const handleAccentColor = (color: string) => {
+    setForm((prev) => ({ ...prev, accent_color: color }));
+    useThemeStore.getState().setAccentColor(color);
+  };
+
+  const connectGoogle = async () => {
+    if (!householdId) return;
+    try {
+      const { data } = await integrationsApi.getGoogleAuthUrl(householdId);
+      window.location.href = data.url;
+    } catch {
+      // handle error silently
+    }
+  };
+
+  const connectMicrosoft = async () => {
+    if (!householdId) return;
+    try {
+      const { data } = await integrationsApi.getMicrosoftAuthUrl(householdId);
+      window.location.href = data.url;
+    } catch {
+      // handle error silently
+    }
   };
 
   return (
@@ -135,11 +156,11 @@ export default function SettingsPanel() {
           </label>
           <input
             type="text"
-            value={form.household_name}
+            value={form.name}
             onChange={(e) =>
               setForm((prev) => ({
                 ...prev,
-                household_name: e.target.value,
+                name: e.target.value,
               }))
             }
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-3 text-base text-gray-900 dark:text-gray-100 min-h-[44px]"
@@ -189,9 +210,7 @@ export default function SettingsPanel() {
                 <button
                   key={c}
                   type="button"
-                  onClick={() =>
-                    setForm((prev) => ({ ...prev, accent_color: c }))
-                  }
+                  onClick={() => handleAccentColor(c)}
                   className={`h-10 w-10 rounded-full min-h-[44px] min-w-[44px] transition-transform ${
                     form.accent_color === c
                       ? "ring-2 ring-offset-2 ring-blue-500 scale-110"
@@ -213,8 +232,8 @@ export default function SettingsPanel() {
         </h3>
         <div className="space-y-3">
           {(
-            Object.entries(form.modules) as [
-              keyof HouseholdSettings["modules"],
+            Object.entries(form.modules_enabled) as [
+              keyof HouseholdSettings["modules_enabled"],
               boolean,
             ][]
           ).map(([key, enabled]) => (
@@ -287,41 +306,69 @@ export default function SettingsPanel() {
           🔗 Integrations
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {integrations.map((integration) => (
-            <div
-              key={integration.id}
-              className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-4"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{integration.icon}</span>
-                <div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {integration.name}
-                  </div>
-                  <div
-                    className={`text-xs ${
-                      integration.connected
-                        ? "text-green-600 dark:text-green-400"
-                        : "text-gray-400 dark:text-gray-500"
-                    }`}
-                  >
-                    {integration.connected ? "Connected" : "Disconnected"}
-                  </div>
+          {/* Google Calendar */}
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📅</span>
+              <div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  Google Calendar
+                </div>
+                <div
+                  className={`text-xs ${
+                    integrationStatus?.google
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-gray-400 dark:text-gray-500"
+                  }`}
+                >
+                  {integrationStatus?.google ? "Connected" : "Disconnected"}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => toggleIntegration(integration.id)}
-                className={`rounded-lg px-3 py-2 text-xs font-medium min-h-[44px] transition-colors ${
-                  integration.connected
-                    ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200"
-                    : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200"
-                }`}
-              >
-                {integration.connected ? "Disconnect" : "Connect"}
-              </button>
             </div>
-          ))}
+            <button
+              type="button"
+              onClick={connectGoogle}
+              className={`rounded-lg px-3 py-2 text-xs font-medium min-h-[44px] transition-colors ${
+                integrationStatus?.google
+                  ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                  : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200"
+              }`}
+            >
+              {integrationStatus?.google ? "Connected" : "Connect"}
+            </button>
+          </div>
+
+          {/* Microsoft / Outlook */}
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📧</span>
+              <div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  Outlook
+                </div>
+                <div
+                  className={`text-xs ${
+                    integrationStatus?.microsoft
+                      ? "text-green-600 dark:text-green-400"
+                      : "text-gray-400 dark:text-gray-500"
+                  }`}
+                >
+                  {integrationStatus?.microsoft ? "Connected" : "Disconnected"}
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={connectMicrosoft}
+              className={`rounded-lg px-3 py-2 text-xs font-medium min-h-[44px] transition-colors ${
+                integrationStatus?.microsoft
+                  ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400"
+                  : "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200"
+              }`}
+            >
+              {integrationStatus?.microsoft ? "Connected" : "Connect"}
+            </button>
+          </div>
         </div>
       </section>
 

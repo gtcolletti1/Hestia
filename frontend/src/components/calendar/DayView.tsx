@@ -6,10 +6,11 @@ import {
   startOfDay,
   addHours,
   differenceInMinutes,
-  isSameDay,
 } from "date-fns";
-import client from "@/api/client";
+import { events as eventsApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
 import type { CalendarEvent } from "./types";
+import { mapEventToCalendarEvent } from "./types";
 import EventModal from "./EventModal";
 import QuickAddEvent from "./QuickAddEvent";
 
@@ -26,22 +27,24 @@ export default function DayView({ date }: DayViewProps) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
+  const householdId = useHouseholdStore((s) => s.householdId);
+  const profiles = useHouseholdStore((s) => s.profiles);
+
   const dayStart = format(date, "yyyy-MM-dd");
 
-  const { data: events = [], isLoading } = useQuery<CalendarEvent[]>({
-    queryKey: ["events", "day", dayStart],
+  const { data: rawEvents = [], isLoading } = useQuery({
+    queryKey: ["events", "day", dayStart, householdId],
     queryFn: async () => {
-      const res = await client.get<CalendarEvent[]>("/events", {
-        params: {
-          start: `${dayStart}T00:00:00`,
-          end: `${dayStart}T23:59:59`,
-        },
+      const res = await eventsApi.getAll(householdId!, {
+        start_date: dayStart,
+        end_date: dayStart,
       });
       return res.data;
     },
+    enabled: !!householdId,
   });
 
-  const dayEvents = events.filter((e) => isSameDay(parseISO(e.start), date));
+  const dayEvents = rawEvents.map((ev) => mapEventToCalendarEvent(ev, profiles));
 
   const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => START_HOUR + i);
 

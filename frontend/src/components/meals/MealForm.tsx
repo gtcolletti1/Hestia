@@ -56,18 +56,19 @@ export default function MealForm({
   };
 
   const createMutation = useMutation({
-    mutationFn: (data: Partial<MealPlan>) => meals.create(householdId, data),
+    mutationFn: (data: Partial<MealPlan>) =>
+      meals.create({ ...data, household_id: householdId }),
     onSuccess: invalidate,
   });
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<MealPlan>) =>
-      meals.update(householdId, meal!.id, data),
+      meals.update(meal!.id, data),
     onSuccess: invalidate,
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => meals.delete(householdId, meal!.id),
+    mutationFn: () => meals.delete(meal!.id),
     onSuccess: invalidate,
   });
 

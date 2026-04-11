@@ -7,8 +7,10 @@ import {
   isToday,
   isTomorrow,
 } from "date-fns";
-import client from "@/api/client";
+import { events as eventsApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
 import type { CalendarEvent } from "./types";
+import { mapEventToCalendarEvent } from "./types";
 import EventModal from "./EventModal";
 
 interface AgendaViewProps {
@@ -23,18 +25,22 @@ export default function AgendaView({ date }: AgendaViewProps) {
 
   const rangeEnd = addDays(date, daysToShow);
 
-  const { data: events = [], isLoading } = useQuery<CalendarEvent[]>({
-    queryKey: ["events", "agenda", format(date, "yyyy-MM-dd"), daysToShow],
+  const householdId = useHouseholdStore((s) => s.householdId);
+  const storeProfiles = useHouseholdStore((s) => s.profiles);
+
+  const { data: rawEvents = [], isLoading } = useQuery({
+    queryKey: ["events", "agenda", format(date, "yyyy-MM-dd"), daysToShow, householdId],
     queryFn: async () => {
-      const res = await client.get<CalendarEvent[]>("/events", {
-        params: {
-          start: format(date, "yyyy-MM-dd'T'00:00:00"),
-          end: format(rangeEnd, "yyyy-MM-dd'T'23:59:59"),
-        },
+      const res = await eventsApi.getAll(householdId!, {
+        start_date: format(date, "yyyy-MM-dd"),
+        end_date: format(rangeEnd, "yyyy-MM-dd"),
       });
       return res.data;
     },
+    enabled: !!householdId,
   });
+
+  const events = rawEvents.map((ev) => mapEventToCalendarEvent(ev, storeProfiles));
 
   // Group events by date
   const grouped = events.reduce<Record<string, CalendarEvent[]>>((acc, ev) => {

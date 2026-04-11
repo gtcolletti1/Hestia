@@ -1,5 +1,7 @@
+import { useEffect } from "react";
 import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
 import Clock from "@/components/shared/Clock";
+import { useHouseholdStore } from "@/stores/householdStore";
 
 const navItems = [
   { to: "/", icon: "🏠", label: "Home" },
@@ -17,11 +19,32 @@ export default function AppShell() {
     pathname.startsWith(p),
   );
 
+  const householdName = useHouseholdStore((s) => s.householdName);
+  const profiles = useHouseholdStore((s) => s.profiles);
+  const fetchProfiles = useHouseholdStore((s) => s.fetchProfiles);
+  const fetchHousehold = useHouseholdStore((s) => s.fetchHousehold);
+
+  useEffect(() => {
+    if (profiles.length === 0) {
+      fetchProfiles();
+    }
+    if (!householdName) {
+      fetchHousehold();
+    }
+  }, [profiles.length, householdName, fetchProfiles, fetchHousehold]);
+
   return (
     <div className="flex h-screen flex-col bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
       {/* Top bar */}
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-700 dark:bg-gray-800">
-        <Clock />
+        <div className="flex items-center gap-4">
+          <Clock />
+          {householdName && (
+            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+              {householdName}
+            </span>
+          )}
+        </div>
         <Link
           to="/admin"
           className="touch-target flex items-center justify-center rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 active:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 dark:active:bg-gray-600"

@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import client from "@/api/client";
-import type { Routine } from "./RoutineList";
+import { routines as routinesApi, profiles as profilesApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
+import type { Routine } from "@/types";
 
 interface ProfileOption {
   id: string;
@@ -40,6 +41,7 @@ function newStepKey() {
 
 export default function RoutineForm({ routine, onClose, onSaved }: Props) {
   const queryClient = useQueryClient();
+  const householdId = useHouseholdStore((s) => s.householdId);
   const isEditing = !!routine;
 
   const [name, setName] = useState(routine?.name ?? "");
@@ -60,16 +62,22 @@ export default function RoutineForm({ routine, onClose, onSaved }: Props) {
   );
 
   const { data: profiles = [] } = useQuery<ProfileOption[]>({
-    queryKey: ["profiles"],
-    queryFn: async () => (await client.get("/profiles")).data,
+    queryKey: ["profiles", householdId],
+    queryFn: async () => (await profilesApi.getAll(householdId!)).data,
+    enabled: !!householdId,
   });
 
   const saveMutation = useMutation({
     mutationFn: async (payload: Record<string, unknown>) => {
       if (isEditing) {
-        return client.put(`/routines/${routine.id}`, payload);
+        return routinesApi.update(routine.id, payload);
       }
-      return client.post("/routines", payload);
+      const { steps: rawSteps, ...rest } = payload;
+      return routinesApi.create({
+        ...rest,
+        household_id: householdId!,
+        steps: rawSteps,
+      } as Parameters<typeof routinesApi.create>[0]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["routines"] });

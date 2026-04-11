@@ -88,6 +88,8 @@ services:
       dockerfile: Dockerfile
       target: build
     command: npx vite dev --host 0.0.0.0 --port 3000
+    environment:
+      - VITE_API_TARGET=http://backend:8000
     volumes:
       - ./frontend/src:/app/src
     ports:

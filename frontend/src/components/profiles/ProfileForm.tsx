@@ -60,18 +60,24 @@ export default function ProfileForm({
 
   const createMutation = useMutation({
     mutationFn: (data: Partial<Profile>) =>
-      profiles.create(householdId, data),
+      profiles.create({
+        name: data.name!,
+        color: data.color!,
+        role: data.role!,
+        household_id: householdId,
+        ...data,
+      }),
     onSuccess: invalidate,
   });
 
   const updateMutation = useMutation({
     mutationFn: (data: Partial<Profile>) =>
-      profiles.update(householdId, profile!.id, data),
+      profiles.update(profile!.id, data),
     onSuccess: invalidate,
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => profiles.delete(householdId, profile!.id),
+    mutationFn: () => profiles.delete(profile!.id),
     onSuccess: invalidate,
   });
 

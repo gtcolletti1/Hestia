@@ -3,6 +3,7 @@ import type {
   Profile,
   Event,
   Routine,
+  RoutineStep,
   RoutineCompletion,
   TaskList,
   ListItem,
@@ -14,123 +15,248 @@ import type {
 
 export const profiles = {
   getAll: (householdId: string) =>
-    client.get<Profile[]>(`/households/${householdId}/profiles`),
+    client.get<Profile[]>("/profiles", {
+      params: { household_id: householdId },
+    }),
 
-  create: (householdId: string, data: Partial<Profile>) =>
-    client.post<Profile>(`/households/${householdId}/profiles`, data),
+  getOne: (id: string) => client.get<Profile>(`/profiles/${id}`),
 
-  update: (householdId: string, profileId: string, data: Partial<Profile>) =>
-    client.patch<Profile>(
-      `/households/${householdId}/profiles/${profileId}`,
-      data,
-    ),
+  create: (data: {
+    name: string;
+    color: string;
+    role: string;
+    household_id: string;
+  }) => client.post<Profile>("/profiles", data),
 
-  delete: (householdId: string, profileId: string) =>
-    client.delete(`/households/${householdId}/profiles/${profileId}`),
+  update: (id: string, data: Partial<Profile>) =>
+    client.put<Profile>(`/profiles/${id}`, data),
+
+  delete: (id: string) => client.delete(`/profiles/${id}`),
 };
 
-// --- Calendar ---
+// --- Households ---
 
-export const calendar = {
-  getEvents: (householdId: string, params?: { start?: string; end?: string }) =>
-    client.get<Event[]>(`/households/${householdId}/events`, { params }),
+export const households = {
+  create: (data: { name: string }) =>
+    client.post<{ id: string; name: string }>("/households", data),
 
-  createEvent: (householdId: string, data: Partial<Event>) =>
-    client.post<Event>(`/households/${householdId}/events`, data),
+  getOne: (householdId: string) =>
+    client.get<{ id: string; name: string; profiles: Profile[] }>(
+      `/households/${householdId}`,
+    ),
+};
 
-  updateEvent: (householdId: string, eventId: string, data: Partial<Event>) =>
-    client.patch<Event>(`/households/${householdId}/events/${eventId}`, data),
+// --- Events ---
 
-  deleteEvent: (householdId: string, eventId: string) =>
-    client.delete(`/households/${householdId}/events/${eventId}`),
+export const events = {
+  getAll: (
+    householdId: string,
+    params: {
+      start_date: string;
+      end_date: string;
+      profile_id?: string;
+      source_calendar_id?: string;
+    },
+  ) =>
+    client.get<Event[]>("/events", {
+      params: { household_id: householdId, ...params },
+    }),
+
+  getOne: (eventId: string) => client.get<Event>(`/events/${eventId}`),
+
+  create: (data: Partial<Event> & { source_calendar_id: string }) =>
+    client.post<Event>("/events", data),
+
+  update: (eventId: string, data: Partial<Event>) =>
+    client.put<Event>(`/events/${eventId}`, data),
+
+  delete: (eventId: string) => client.delete(`/events/${eventId}`),
+};
+
+// --- Calendars (source calendars) ---
+
+export const calendars = {
+  getAll: (householdId: string) =>
+    client.get("/calendars", {
+      params: { household_id: householdId },
+    }),
+
+  create: (data: { name: string; household_id: string }) =>
+    client.post("/calendars", data),
+
+  update: (calendarId: string, data: Record<string, unknown>) =>
+    client.put(`/calendars/${calendarId}`, data),
+
+  delete: (calendarId: string) => client.delete(`/calendars/${calendarId}`),
 };
 
 // --- Routines ---
 
 export const routines = {
-  getAll: (householdId: string) =>
-    client.get<Routine[]>(`/households/${householdId}/routines`),
-
-  getActive: (householdId: string, params?: { profile_id?: string }) =>
-    client.get<Routine[]>(`/households/${householdId}/routines/active`, {
-      params,
+  getAll: (
+    householdId: string,
+    params?: { profile_id?: string; time_block?: string },
+  ) =>
+    client.get<Routine[]>("/routines", {
+      params: { household_id: householdId, ...params },
     }),
 
-  completeStep: (
-    householdId: string,
-    routineId: string,
-    data: { profile_id: string; step_id: string; date: string },
-  ) =>
-    client.post<RoutineCompletion>(
-      `/households/${householdId}/routines/${routineId}/complete-step`,
-      data,
-    ),
+  getOne: (routineId: string) =>
+    client.get<Routine>(`/routines/${routineId}`),
 
-  getStreak: (
-    householdId: string,
+  create: (
+    data: Partial<Routine> & {
+      household_id: string;
+      steps: Partial<RoutineStep>[];
+    },
+  ) => client.post<Routine>("/routines", data),
+
+  update: (routineId: string, data: Partial<Routine>) =>
+    client.put<Routine>(`/routines/${routineId}`, data),
+
+  delete: (routineId: string) => client.delete(`/routines/${routineId}`),
+
+  completeStep: (
     routineId: string,
+    stepId: string,
     profileId: string,
   ) =>
-    client.get<{ streak: number }>(
-      `/households/${householdId}/routines/${routineId}/streak/${profileId}`,
+    client.post<RoutineCompletion>(
+      `/routines/${routineId}/steps/${stepId}/complete`,
+      null,
+      { params: { profile_id: profileId } },
     ),
+
+  getStreak: (routineId: string, profileId: string) =>
+    client.get<{ streak: number }>(`/routines/${routineId}/streak`, {
+      params: { profile_id: profileId },
+    }),
+
+  getActive: (
+    householdId: string,
+    params?: { profile_id?: string },
+  ) =>
+    client.get<Routine[]>("/routines/active", {
+      params: { household_id: householdId, ...params },
+    }),
 };
 
 // --- Lists ---
 
 export const lists = {
-  getAll: (householdId: string) =>
-    client.get<TaskList[]>(`/households/${householdId}/lists`),
+  getAll: (householdId: string, params?: { category?: string }) =>
+    client.get<TaskList[]>("/lists", {
+      params: { household_id: householdId, ...params },
+    }),
 
-  create: (householdId: string, data: Partial<TaskList>) =>
-    client.post<TaskList>(`/households/${householdId}/lists`, data),
+  getOne: (listId: string) =>
+    client.get<TaskList>(`/lists/${listId}`),
 
-  addItem: (householdId: string, listId: string, data: Partial<ListItem>) =>
-    client.post<ListItem>(
-      `/households/${householdId}/lists/${listId}/items`,
-      data,
-    ),
+  create: (data: Partial<TaskList> & { household_id: string }) =>
+    client.post<TaskList>("/lists", data),
 
-  toggleItem: (householdId: string, listId: string, itemId: string) =>
-    client.patch<ListItem>(
-      `/households/${householdId}/lists/${listId}/items/${itemId}/toggle`,
-    ),
+  update: (listId: string, data: Partial<TaskList>) =>
+    client.put<TaskList>(`/lists/${listId}`, data),
 
-  deleteItem: (householdId: string, listId: string, itemId: string) =>
-    client.delete(
-      `/households/${householdId}/lists/${listId}/items/${itemId}`,
-    ),
+  delete: (listId: string) => client.delete(`/lists/${listId}`),
+
+  addItem: (listId: string, data: Partial<ListItem>) =>
+    client.post<ListItem>(`/lists/${listId}/items`, data),
+
+  updateItem: (listId: string, itemId: string, data: Partial<ListItem>) =>
+    client.put<ListItem>(`/lists/${listId}/items/${itemId}`, data),
+
+  deleteItem: (listId: string, itemId: string) =>
+    client.delete(`/lists/${listId}/items/${itemId}`),
+
+  toggleItem: (listId: string, itemId: string) =>
+    client.patch<ListItem>(`/lists/${listId}/items/${itemId}/toggle`),
+
+  reorder: (listId: string, data: { item_ids: string[] }) =>
+    client.put(`/lists/${listId}/reorder`, data),
 };
 
 // --- Meals ---
 
 export const meals = {
-  getByDate: (householdId: string, date: string) =>
-    client.get<MealPlan[]>(`/households/${householdId}/meals`, {
-      params: { date },
+  getAll: (
+    householdId: string,
+    params?: {
+      date?: string;
+      start_date?: string;
+      end_date?: string;
+    },
+  ) =>
+    client.get<MealPlan[]>("/meals", {
+      params: { household_id: householdId, ...params },
     }),
 
-  getWeekly: (householdId: string, startDate: string) =>
-    client.get<MealPlan[]>(`/households/${householdId}/meals/week`, {
-      params: { start_date: startDate },
+  getOne: (mealId: string) => client.get<MealPlan>(`/meals/${mealId}`),
+
+  create: (data: Partial<MealPlan> & { household_id: string }) =>
+    client.post<MealPlan>("/meals", data),
+
+  update: (mealId: string, data: Partial<MealPlan>) =>
+    client.put<MealPlan>(`/meals/${mealId}`, data),
+
+  delete: (mealId: string) => client.delete(`/meals/${mealId}`),
+
+  getWeekly: (householdId: string, weekStart: string) =>
+    client.get<MealPlan[]>("/meals/week", {
+      params: { household_id: householdId, week_start: weekStart },
     }),
-
-  create: (householdId: string, data: Partial<MealPlan>) =>
-    client.post<MealPlan>(`/households/${householdId}/meals`, data),
-
-  update: (householdId: string, mealId: string, data: Partial<MealPlan>) =>
-    client.patch<MealPlan>(
-      `/households/${householdId}/meals/${mealId}`,
-      data,
-    ),
-
-  delete: (householdId: string, mealId: string) =>
-    client.delete(`/households/${householdId}/meals/${mealId}`),
 };
 
 // --- Dashboard ---
 
 export const dashboard = {
   get: (householdId: string) =>
-    client.get<DashboardData>(`/households/${householdId}/dashboard`),
+    client.get<DashboardData>("/dashboard", {
+      params: { household_id: householdId },
+    }),
+};
+
+// --- Admin ---
+
+export const admin = {
+  getSettings: (householdId: string) =>
+    client.get("/admin/settings", {
+      params: { household_id: householdId },
+    }),
+
+  updateSettings: (householdId: string, data: Record<string, unknown>) =>
+    client.put("/admin/settings", data, {
+      params: { household_id: householdId },
+    }),
+
+  toggleModule: (data: { module: string; enabled: boolean }) =>
+    client.patch("/admin/modules", data),
+};
+
+// --- Auth ---
+
+export const auth = {
+  login: (data: { profile_id: string; pin: string }) =>
+    client.post<{ token: string }>("/auth/login", data),
+
+  me: () => client.get<Profile>("/auth/me"),
+};
+
+// --- Integrations ---
+
+export const integrations = {
+  getGoogleAuthUrl: (householdId: string) =>
+    client.get<{ url: string }>("/integrations/oauth/google/authorize", {
+      params: { household_id: householdId },
+    }),
+
+  getMicrosoftAuthUrl: (householdId: string) =>
+    client.get<{ url: string }>("/integrations/oauth/microsoft/authorize", {
+      params: { household_id: householdId },
+    }),
+
+  getStatus: (householdId: string) =>
+    client.get("/integrations/status", {
+      params: { household_id: householdId },
+    }),
 };

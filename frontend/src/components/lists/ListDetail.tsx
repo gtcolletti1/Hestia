@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import client from "@/api/client";
-import type { List, ListItem } from "./ListView";
+import { lists as listsApi } from "@/api/endpoints";
+import type { TaskList, ListItem } from "@/types";
+
+type List = TaskList;
 
 interface Props {
   list: List;
@@ -15,49 +17,48 @@ export default function ListDetail({ list, onClose, onEdit }: Props) {
   const [newItemText, setNewItemText] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Fetch live data
   const { data: liveList } = useQuery<List>({
-    queryKey: ["list", list.id],
-    queryFn: async () => (await client.get(`/lists/${list.id}`)).data,
+    queryKey: ["lists", list.id],
+    queryFn: async () => (await listsApi.getOne(list.id)).data,
     initialData: list,
   });
 
   const items = liveList.items;
 
-  // Sort: unchecked first, then checked, maintaining sort_order within each group
   const sortedItems = [...items].sort((a, b) => {
     if (a.is_checked !== b.is_checked) return a.is_checked ? 1 : -1;
     return a.sort_order - b.sort_order;
   });
 
   const toggleItem = useMutation({
-    mutationFn: (item: ListItem) =>
-      client.patch(`/lists/${list.id}/items/${item.id}`, { is_checked: !item.is_checked }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["list", list.id] }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["lists"] }),
+    mutationFn: (item: ListItem) => listsApi.toggleItem(list.id, item.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["lists", list.id] });
+      queryClient.invalidateQueries({ queryKey: ["lists"] });
+    },
   });
 
   const addItem = useMutation({
     mutationFn: (text: string) =>
-      client.post(`/lists/${list.id}/items`, { text }),
+      listsApi.addItem(list.id, { text, sort_order: items.length }),
     onSuccess: () => {
       setNewItemText("");
-      queryClient.invalidateQueries({ queryKey: ["list", list.id] });
+      queryClient.invalidateQueries({ queryKey: ["lists", list.id] });
       queryClient.invalidateQueries({ queryKey: ["lists"] });
     },
   });
 
   const deleteItem = useMutation({
-    mutationFn: (itemId: string) => client.delete(`/lists/${list.id}/items/${itemId}`),
+    mutationFn: (itemId: string) => listsApi.deleteItem(list.id, itemId),
     onSuccess: () => {
       setDeletingId(null);
-      queryClient.invalidateQueries({ queryKey: ["list", list.id] });
+      queryClient.invalidateQueries({ queryKey: ["lists", list.id] });
       queryClient.invalidateQueries({ queryKey: ["lists"] });
     },
   });
 
   const deleteList = useMutation({
-    mutationFn: () => client.delete(`/lists/${list.id}`),
+    mutationFn: () => listsApi.delete(list.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lists"] });
       onClose();
@@ -153,9 +154,9 @@ export default function ListDetail({ list, onClose, onEdit }: Props) {
                     {item.text}
                   </span>
                   <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-                    {item.profile_name && (
+                    {item.assigned_profile_id && (
                       <span className="rounded-full bg-purple-100 px-2 py-0.5 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                        {item.profile_name}
+                        {item.assigned_profile_id}
                       </span>
                     )}
                     {item.due_date && <span>Due {format(new Date(item.due_date), "MMM d")}</span>}

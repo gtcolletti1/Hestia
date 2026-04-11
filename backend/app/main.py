@@ -14,6 +14,11 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     logger.info("Family Hub API starting up")
+    # Import all models so Base.metadata knows every table, then create them.
+    import app.models  # noqa: F401
+    from app.database import init_db
+    await init_db()
+    logger.info("Database tables ready")
     yield
     logger.info("Family Hub API shutting down")
 

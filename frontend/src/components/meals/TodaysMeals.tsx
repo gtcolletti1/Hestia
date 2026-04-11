@@ -47,7 +47,8 @@ export default function TodaysMeals() {
 
   const { data: todayMeals = [] } = useQuery({
     queryKey: ["meals", "today", householdId, today],
-    queryFn: () => meals.getByDate(householdId!, today).then((r) => r.data),
+    queryFn: () =>
+      meals.getAll(householdId!, { date: today }).then((r) => r.data),
     enabled: !!householdId,
   });
 

@@ -1,60 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  format,
-  parseISO,
-  getHours,
-  isToday,
-  compareAsc,
-} from "date-fns";
-import client from "@/api/client";
-
-// ── Local types (used if src/types/index.ts does not exist yet) ──
-
-interface CalendarEvent {
-  id: string;
-  title: string;
-  start: string;
-  end: string;
-  location?: string;
-  profile_id: string;
-  profile_name: string;
-  profile_color: string;
-}
-
-interface RoutineStep {
-  id: string;
-  title: string;
-  done: boolean;
-}
-
-interface ActiveRoutine {
-  id: string;
-  title: string;
-  steps: RoutineStep[];
-  profile_name: string;
-  profile_color: string;
-}
-
-interface Meal {
-  id: string;
-  type: "breakfast" | "lunch" | "dinner" | "snack";
-  title: string;
-  description?: string;
-}
-
-interface ListSummary {
-  id: string;
-  title: string;
-  total: number;
-  checked: number;
-}
-
-interface DashboardData {
-  events: CalendarEvent[];
-  active_routine: ActiveRoutine | null;
-  meals: Meal[];
-  lists: ListSummary[];
-}
+import { format, parseISO } from "date-fns";
+import { dashboard } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
+import type { DashboardData, AgendaBucket, MealPlan, Routine } from "@/types";
 
 // ── Helpers ──
 
@@ -63,32 +11,6 @@ function getGreeting(): string {
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
-}
-
-type TimeBucket = "Morning" | "Afternoon" | "Evening";
-
-function getBucket(iso: string): TimeBucket {
-  const h = getHours(parseISO(iso));
-  if (h < 12) return "Morning";
-  if (h < 17) return "Afternoon";
-  return "Evening";
-}
-
-const BUCKET_ORDER: TimeBucket[] = ["Morning", "Afternoon", "Evening"];
-
-function groupByBucket(events: CalendarEvent[]): Record<TimeBucket, CalendarEvent[]> {
-  const groups: Record<TimeBucket, CalendarEvent[]> = {
-    Morning: [],
-    Afternoon: [],
-    Evening: [],
-  };
-  for (const ev of events) {
-    groups[getBucket(ev.start)].push(ev);
-  }
-  for (const key of BUCKET_ORDER) {
-    groups[key].sort((a, b) => compareAsc(parseISO(a.start), parseISO(b.start)));
-  }
-  return groups;
 }
 
 const MEAL_LABELS: Record<string, string> = {
@@ -116,41 +38,54 @@ function SkeletonCard() {
 
 // ── Sub-components ──
 
-function AgendaSection({ events }: { events: CalendarEvent[] }) {
-  const groups = groupByBucket(events);
+function AgendaSection({ buckets }: { buckets: AgendaBucket[] }) {
+  const hasEvents = buckets.some((b) => b.events.length > 0);
 
   return (
     <section className="space-y-6">
       <h2 className="text-lg font-semibold">Today&apos;s Agenda</h2>
 
-      {BUCKET_ORDER.map((bucket) => (
-        <div key={bucket}>
+      {!hasEvents && (
+        <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+          No events today
+        </p>
+      )}
+
+      {buckets.map((bucket) => (
+        <div key={bucket.bucket}>
           <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-            {bucket}
+            {bucket.bucket}
           </h3>
 
-          {groups[bucket].length === 0 ? (
+          {bucket.events.length === 0 ? (
             <p className="text-sm text-gray-400 dark:text-gray-500 italic">
               No events
             </p>
           ) : (
             <ul className="space-y-2">
-              {groups[bucket].map((ev) => (
+              {bucket.events.map((ev) => (
                 <li
                   key={ev.id}
                   className="flex items-start gap-3 rounded-lg bg-white dark:bg-gray-800 p-3 shadow-sm min-h-[44px]"
                 >
-                  <span
-                    className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: ev.profile_color }}
-                  />
+                  {ev.color && (
+                    <span
+                      className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: ev.color }}
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="font-medium truncate">{ev.title}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {format(parseISO(ev.start), "h:mm a")}
+                      {format(parseISO(ev.start_time), "h:mm a")}
                       {" – "}
-                      {format(parseISO(ev.end), "h:mm a")}
+                      {format(parseISO(ev.end_time), "h:mm a")}
                     </p>
+                    {ev.profile_name && (
+                      <p className="text-xs text-gray-400 dark:text-gray-500">
+                        {ev.profile_name}
+                      </p>
+                    )}
                     {ev.location && (
                       <p className="text-sm text-gray-400 dark:text-gray-500 truncate">
                         📍 {ev.location}
@@ -167,37 +102,36 @@ function AgendaSection({ events }: { events: CalendarEvent[] }) {
   );
 }
 
-function RoutineWidget({ routine }: { routine: ActiveRoutine }) {
-  const done = routine.steps.filter((s) => s.done).length;
-  const total = routine.steps.length;
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-
+function RoutinesWidget({ routines }: { routines: Routine[] }) {
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-      <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">
-        Active Routine
+    <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+      <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+        Active Routines
       </h3>
-      <div className="flex items-center gap-2 mb-2">
-        <span
-          className="h-3 w-3 rounded-full shrink-0"
-          style={{ backgroundColor: routine.profile_color }}
-        />
-        <p className="font-semibold truncate">{routine.title}</p>
-      </div>
-      <div className="w-full rounded-full bg-gray-200 dark:bg-gray-700 h-2 mb-1">
-        <div
-          className="h-2 rounded-full bg-blue-500 transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400">
-        {done}/{total} steps done
-      </p>
+      {routines.length === 0 ? (
+        <p className="text-sm text-gray-400 italic">No routines set up yet</p>
+      ) : (
+        <ul className="space-y-2">
+          {routines.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 min-h-[44px]">
+              <span className="text-xs font-semibold uppercase text-gray-400 w-16 shrink-0">
+                {r.time_block}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium truncate">{r.name}</p>
+                <p className="text-xs text-gray-400">
+                  {r.steps.length} step{r.steps.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-function MealsWidget({ meals }: { meals: Meal[] }) {
+function MealsWidget({ meals }: { meals: MealPlan[] }) {
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
       <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -208,12 +142,9 @@ function MealsWidget({ meals }: { meals: Meal[] }) {
       ) : (
         <ul className="space-y-2">
           {meals.map((m) => (
-            <li
-              key={m.id}
-              className="flex items-center gap-3 min-h-[44px]"
-            >
+            <li key={m.id} className="flex items-center gap-3 min-h-[44px]">
               <span className="text-xs font-semibold uppercase text-gray-400 w-16 shrink-0">
-                {MEAL_LABELS[m.type] ?? m.type}
+                {MEAL_LABELS[m.meal_type] ?? m.meal_type}
               </span>
               <span className="truncate">{m.title}</span>
             </li>
@@ -224,7 +155,7 @@ function MealsWidget({ meals }: { meals: Meal[] }) {
   );
 }
 
-function ListsWidget({ lists }: { lists: ListSummary[] }) {
+function ListsWidget({ lists }: { lists: DashboardData["active_lists"] }) {
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
       <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -234,14 +165,14 @@ function ListsWidget({ lists }: { lists: ListSummary[] }) {
         <p className="text-sm text-gray-400 italic">No active lists</p>
       ) : (
         <ul className="space-y-3">
-          {lists.map((l) => {
-            const pct = l.total === 0 ? 0 : Math.round((l.checked / l.total) * 100);
+          {lists.map((l, i) => {
+            const pct = l.item_count === 0 ? 0 : Math.round((l.checked_count / l.item_count) * 100);
             return (
-              <li key={l.id}>
+              <li key={i}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium truncate">{l.title}</span>
+                  <span className="text-sm font-medium truncate">{l.name}</span>
                   <span className="text-xs text-gray-400 shrink-0 ml-2">
-                    {l.checked}/{l.total}
+                    {l.checked_count}/{l.item_count}
                   </span>
                 </div>
                 <div className="w-full rounded-full bg-gray-200 dark:bg-gray-700 h-2">
@@ -262,25 +193,20 @@ function ListsWidget({ lists }: { lists: ListSummary[] }) {
 // ── Main component ──
 
 export default function DashboardHome() {
-  const householdId = localStorage.getItem("household_id") ?? "default";
+  const householdId = useHouseholdStore((s) => s.householdId);
 
   const { data, isLoading, isError } = useQuery<DashboardData>({
     queryKey: ["dashboard", householdId],
     queryFn: async () => {
-      const res = await client.get<DashboardData>("/dashboard", {
-        params: { household_id: householdId },
-      });
+      const res = await dashboard.get(householdId!);
       return res.data;
     },
+    enabled: !!householdId,
     refetchInterval: 60_000,
   });
 
-  const todayEvents = (data?.events ?? []).filter((e) =>
-    isToday(parseISO(e.start)),
-  );
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       {/* Header */}
       <header>
         <h1 className="text-3xl font-bold">{getGreeting()}</h1>
@@ -307,7 +233,7 @@ export default function DashboardHome() {
               ))}
             </div>
           ) : (
-            <AgendaSection events={todayEvents} />
+            <AgendaSection buckets={data?.agenda ?? []} />
           )}
         </div>
 
@@ -321,11 +247,9 @@ export default function DashboardHome() {
             </>
           ) : (
             <>
-              {data?.active_routine && (
-                <RoutineWidget routine={data.active_routine} />
-              )}
-              <MealsWidget meals={data?.meals ?? []} />
-              <ListsWidget lists={data?.lists ?? []} />
+              <RoutinesWidget routines={data?.active_routines ?? []} />
+              <MealsWidget meals={data?.today_meals ?? []} />
+              <ListsWidget lists={data?.active_lists ?? []} />
             </>
           )}
         </aside>

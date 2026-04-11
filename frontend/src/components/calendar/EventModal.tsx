@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import client from "@/api/client";
+import { events as eventsApi } from "@/api/endpoints";
 import type { CalendarEvent, EventFormData } from "./types";
 
 interface EventModalProps {
@@ -46,7 +46,15 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
 
   const updateMutation = useMutation({
     mutationFn: async (data: EventFormData) => {
-      await client.put(`/events/${event!.id}`, data);
+      await eventsApi.update(event!.id, {
+        title: data.title,
+        start_time: data.start,
+        end_time: data.end,
+        location: data.location,
+        description: data.description,
+        profile_id: data.profile_id || undefined,
+        all_day: data.all_day,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["events"] });
@@ -57,7 +65,7 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      await client.delete(`/events/${event!.id}`);
+      await eventsApi.delete(event!.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["events"] });

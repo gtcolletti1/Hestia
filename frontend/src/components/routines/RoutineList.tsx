@@ -1,41 +1,15 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import client from "@/api/client";
+import { routines as routinesApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
+import type { Routine, RoutineStep } from "@/types";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
 import Modal from "@/components/shared/Modal";
 import RoutineStepper from "./RoutineStepper";
 import RoutineForm from "./RoutineForm";
 
-// ── Local types (no shared @/types yet) ──
-
-export interface RoutineStep {
-  id: string;
-  label: string;
-  icon?: string;
-  sort_order: number;
-  completed?: boolean;
-}
-
-export interface RoutineProfile {
-  id: string;
-  name: string;
-  color?: string;
-  avatar_url?: string;
-}
-
-export interface Routine {
-  id: string;
-  name: string;
-  time_block: "morning" | "afternoon" | "evening" | "bedtime";
-  days_of_week: number[];
-  start_time?: string;
-  is_active: boolean;
-  profile_id: string;
-  profile?: RoutineProfile;
-  steps: RoutineStep[];
-  streak?: number;
-}
+export type { Routine, RoutineStep };
 
 type TimeBlock = Routine["time_block"];
 
@@ -59,18 +33,21 @@ function currentTimeBlock(): TimeBlock {
 
 export default function RoutineList() {
   const queryClient = useQueryClient();
+  const householdId = useHouseholdStore((s) => s.householdId);
+  const storeProfiles = useHouseholdStore((s) => s.profiles);
   const [selectedRoutine, setSelectedRoutine] = useState<Routine | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
 
   const { data: routines = [], isLoading, error } = useQuery<Routine[]>({
-    queryKey: ["routines"],
-    queryFn: async () => (await client.get("/routines")).data,
+    queryKey: ["routines", householdId],
+    queryFn: async () => (await routinesApi.getAll(householdId!)).data,
+    enabled: !!householdId,
   });
 
   const toggleMutation = useMutation({
     mutationFn: (routine: Routine) =>
-      client.patch(`/routines/${routine.id}`, { is_active: !routine.is_active }),
+      routinesApi.update(routine.id, { is_active: !routine.is_active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["routines"] }),
   });
 
@@ -139,7 +116,7 @@ export default function RoutineList() {
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {blockRoutines.map((routine) => {
-                const profile = routine.profile;
+                const profile = storeProfiles.find((p) => p.id === routine.profile_id);
                 return (
                   <div
                     key={routine.id}

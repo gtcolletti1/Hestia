@@ -12,8 +12,10 @@ import {
   isSameDay,
   isToday,
 } from "date-fns";
-import client from "@/api/client";
+import { events as eventsApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
 import type { CalendarEvent } from "./types";
+import { mapEventToCalendarEvent } from "./types";
 
 interface MonthViewProps {
   date: Date;
@@ -29,20 +31,24 @@ export default function MonthView({ date, onSelectDay }: MonthViewProps) {
   const calStart = startOfWeek(monthStart, { weekStartsOn: 0 });
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
 
+  const householdId = useHouseholdStore((s) => s.householdId);
+  const profiles = useHouseholdStore((s) => s.profiles);
+
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
 
-  const { data: events = [] } = useQuery<CalendarEvent[]>({
-    queryKey: ["events", "month", format(monthStart, "yyyy-MM")],
+  const { data: rawEvents = [] } = useQuery({
+    queryKey: ["events", "month", format(monthStart, "yyyy-MM"), householdId],
     queryFn: async () => {
-      const res = await client.get<CalendarEvent[]>("/events", {
-        params: {
-          start: format(calStart, "yyyy-MM-dd'T'00:00:00"),
-          end: format(calEnd, "yyyy-MM-dd'T'23:59:59"),
-        },
+      const res = await eventsApi.getAll(householdId!, {
+        start_date: format(calStart, "yyyy-MM-dd"),
+        end_date: format(calEnd, "yyyy-MM-dd"),
       });
       return res.data;
     },
+    enabled: !!householdId,
   });
+
+  const events = rawEvents.map((ev) => mapEventToCalendarEvent(ev, profiles));
 
   // Build array of weeks → days
   const weeks: Date[][] = [];
