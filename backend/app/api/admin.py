@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_current_profile, require_admin
 from app.database import get_db
 from app.models.calendar import CalendarProvider, Event, SourceCalendar
 from app.models.list import ListCategory, ListItem, TaskList
@@ -38,8 +39,11 @@ def _load_settings(household: Household) -> HouseholdSettings:
 async def get_settings(
     household_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> HouseholdSettings:
     """Return current household settings."""
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     result = await db.execute(
         select(Household).where(Household.id == household_id)
     )
@@ -55,8 +59,11 @@ async def update_settings(
     payload: HouseholdSettingsUpdate,
     household_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(require_admin),
 ) -> HouseholdSettings:
     """Update household settings (partial update)."""
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     result = await db.execute(
         select(Household).where(Household.id == household_id)
     )
@@ -89,8 +96,11 @@ async def toggle_module(
     payload: ModuleToggle,
     household_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(require_admin),
 ) -> HouseholdSettings:
     """Enable or disable a single module."""
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     valid_modules = {"calendar", "routines", "lists", "meals"}
     if payload.module not in valid_modules:
         raise HTTPException(

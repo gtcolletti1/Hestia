@@ -2,12 +2,13 @@
 
 
 import uuid
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_current_profile
 from app.database import get_db
 from app.models.calendar import Event, SourceCalendar
 from app.models.list import ListItem, TaskList
@@ -29,8 +30,11 @@ router = APIRouter(tags=["dashboard"])
 async def get_dashboard(
     household_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> DashboardResponse:
     """Composite read-only dashboard endpoint."""
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     today = date.today()
     now = datetime.now(tz=timezone.utc)
     current_weekday = today.weekday()  # Monday = 0
@@ -48,7 +52,7 @@ async def get_dashboard(
 
     # ── Today's events ───────────────────────────────────────────────────
     day_start = datetime.combine(today, time.min, tzinfo=timezone.utc)
-    day_end = datetime.combine(today, time.max, tzinfo=timezone.utc)
+    day_end = datetime.combine(today + timedelta(days=1), time.min, tzinfo=timezone.utc)
 
     events_stmt = (
         select(Event, Profile.name.label("profile_name"))
@@ -56,7 +60,7 @@ async def get_dashboard(
         .outerjoin(Profile, Event.profile_id == Profile.id)
         .where(
             SourceCalendar.household_id == household_id,
-            Event.start_time <= day_end,
+            Event.start_time < day_end,
             Event.end_time >= day_start,
         )
         .order_by(Event.start_time)
@@ -81,7 +85,7 @@ async def get_dashboard(
             profile_name=profile_name,
             location=event.location,
         )
-        event_local_time = event.start_time.timetz()
+        event_local_time = event.start_time.time()
         if event_local_time < noon:
             morning_events.append(summary)
         elif event_local_time < five_pm:
@@ -103,7 +107,7 @@ async def get_dashboard(
         )
     )
     active_routines: list[dict] = []
-    current_time = now.timetz()
+    current_time = now.time()
 
     for routine in routines_result.scalars().all():
         if current_weekday not in (routine.days_of_week or []):

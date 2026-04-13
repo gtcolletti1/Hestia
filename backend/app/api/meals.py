@@ -8,8 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.auth import get_current_profile
 from app.database import get_db
 from app.models.meal import MealPlan
+from app.models.user import Profile
 from app.schemas.meal import (
     DayMeals,
     MealPlanCreate,
@@ -28,8 +30,11 @@ async def list_meals(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> list[MealPlanResponse]:
     """Return meals for a single day or a date range."""
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     stmt = select(MealPlan).where(MealPlan.household_id == household_id)
 
     if date is not None:
@@ -50,8 +55,11 @@ async def get_weekly_meals(
     household_id: uuid.UUID,
     week_start: date = Query(...),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> WeeklyMealView:
     """Return a structured weekly meal view (7 days starting from week_start)."""
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     week_end = week_start + timedelta(days=6)
 
     stmt = (
@@ -85,12 +93,15 @@ async def get_weekly_meals(
 async def get_meal(
     meal_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> MealPlanResponse:
     """Get a single meal plan by id."""
     result = await db.execute(select(MealPlan).where(MealPlan.id == meal_id))
     meal = result.scalar_one_or_none()
     if meal is None:
         raise HTTPException(status_code=404, detail="Meal plan not found")
+    if meal.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return meal
 
 
@@ -98,8 +109,11 @@ async def get_meal(
 async def create_meal(
     payload: MealPlanCreate,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> MealPlanResponse:
     """Create a new meal plan."""
+    if current_profile.household_id != payload.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     meal = MealPlan(**payload.model_dump())
     db.add(meal)
     await db.flush()
@@ -112,12 +126,15 @@ async def update_meal(
     meal_id: uuid.UUID,
     payload: MealPlanUpdate,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> MealPlanResponse:
     """Update an existing meal plan."""
     result = await db.execute(select(MealPlan).where(MealPlan.id == meal_id))
     meal = result.scalar_one_or_none()
     if meal is None:
         raise HTTPException(status_code=404, detail="Meal plan not found")
+    if meal.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(meal, field, value)
@@ -131,11 +148,14 @@ async def update_meal(
 async def delete_meal(
     meal_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> None:
     """Delete a meal plan."""
     result = await db.execute(select(MealPlan).where(MealPlan.id == meal_id))
     meal = result.scalar_one_or_none()
     if meal is None:
         raise HTTPException(status_code=404, detail="Meal plan not found")
+    if meal.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     await db.delete(meal)
     await db.flush()

@@ -1,7 +1,7 @@
 import uuid
 import datetime as dt
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.models.calendar import CalendarProvider
 
@@ -25,6 +25,12 @@ class EventCreate(EventBase):
     source_calendar_id: uuid.UUID
     profile_id: uuid.UUID | None = None
 
+    @model_validator(mode="after")
+    def validate_times(self):
+        if not self.all_day and self.start_time >= self.end_time:
+            raise ValueError("start_time must be before end_time")
+        return self
+
 
 class EventUpdate(BaseModel):
     title: str | None = None
@@ -38,6 +44,13 @@ class EventUpdate(BaseModel):
     is_private: bool | None = None
     source_calendar_id: uuid.UUID | None = None
     profile_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_times(self):
+        if self.start_time is not None and self.end_time is not None:
+            if not self.all_day and self.start_time >= self.end_time:
+                raise ValueError("start_time must be before end_time")
+        return self
 
 
 class EventResponse(EventBase):

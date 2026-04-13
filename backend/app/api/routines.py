@@ -1,13 +1,15 @@
 import uuid
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import get_current_profile
 from app.database import get_db
 from app.models.routine import Routine, RoutineCompletion, RoutineStep, TimeBlock
+from app.models.user import Profile
 from app.schemas.routine import (
     RoutineCompletionResponse,
     RoutineCreate,
@@ -35,7 +37,10 @@ async def list_routines(
     profile_id: uuid.UUID | None = Query(None),
     time_block: TimeBlock | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> list[Routine]:
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     stmt = (
         select(Routine)
         .options(selectinload(Routine.steps))
@@ -58,8 +63,11 @@ async def get_active_routines(
     household_id: uuid.UUID = Query(...),
     profile_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> list[Routine]:
-    now = datetime.now()
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    now = datetime.now(timezone.utc)
     current_day = now.weekday()
     current_time = now.time()
 
@@ -96,6 +104,7 @@ async def get_active_routines(
 async def get_routine(
     routine_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> Routine:
     stmt = (
         select(Routine)
@@ -106,6 +115,8 @@ async def get_routine(
     routine = result.scalar_one_or_none()
     if routine is None:
         raise HTTPException(status_code=404, detail="Routine not found")
+    if routine.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return routine
 
 
@@ -116,7 +127,10 @@ async def get_routine(
 async def create_routine(
     payload: RoutineCreate,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> Routine:
+    if current_profile.household_id != payload.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     routine = Routine(
         household_id=payload.household_id,
         profile_id=payload.profile_id,
@@ -158,6 +172,7 @@ async def update_routine(
     routine_id: uuid.UUID,
     payload: RoutineUpdate,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> Routine:
     stmt = (
         select(Routine)
@@ -168,6 +183,8 @@ async def update_routine(
     routine = result.scalar_one_or_none()
     if routine is None:
         raise HTTPException(status_code=404, detail="Routine not found")
+    if routine.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     update_data = payload.model_dump(exclude_unset=True)
     steps_data = update_data.pop("steps", None)
@@ -209,13 +226,17 @@ async def update_routine(
 async def delete_routine(
     routine_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> None:
     stmt = select(Routine).where(Routine.id == routine_id)
     result = await db.execute(stmt)
     routine = result.scalar_one_or_none()
     if routine is None:
         raise HTTPException(status_code=404, detail="Routine not found")
+    if routine.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     await db.delete(routine)
+    await db.flush()
 
 
 # ── Complete a step ──────────────────────────────────────────────────────────
@@ -230,6 +251,7 @@ async def complete_step(
     step_id: uuid.UUID,
     profile_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
+    _: Profile = Depends(get_current_profile),
 ) -> RoutineCompletion:
     # Verify routine and step exist
     stmt = (
@@ -275,7 +297,7 @@ async def complete_step(
     # Check if all steps are done
     if set(completion.completed_steps) >= step_ids:
         completion.is_fully_completed = True
-        completion.completed_at = datetime.now()
+        completion.completed_at = datetime.now(timezone.utc)
 
     await db.flush()
     await db.refresh(completion)
@@ -290,6 +312,7 @@ async def get_streak(
     routine_id: uuid.UUID,
     profile_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
+    _: Profile = Depends(get_current_profile),
 ) -> StreakInfo:
     stmt = (
         select(RoutineCompletion)
@@ -317,13 +340,12 @@ async def get_streak(
         if d == expected:
             current_streak += 1
             expected = date.fromordinal(d.toordinal() - 1)
-        elif d < expected:
-            # Allow gap: if most recent completion is yesterday, still count
-            if current_streak == 0 and d == date.fromordinal(today.toordinal() - 1):
-                current_streak = 1
-                expected = date.fromordinal(d.toordinal() - 1)
-            else:
-                break
+        elif current_streak == 0 and d == date.fromordinal(today.toordinal() - 1):
+            # Most recent completion was yesterday — start streak from there
+            current_streak = 1
+            expected = date.fromordinal(d.toordinal() - 1)
+        else:
+            break
 
     # Calculate longest streak
     longest_streak = 1

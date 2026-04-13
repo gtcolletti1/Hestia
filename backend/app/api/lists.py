@@ -5,8 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import get_current_profile
 from app.database import get_db
 from app.models.list import ListCategory, ListItem, TaskList
+from app.models.user import Profile
 from app.schemas.list import (
     ListItemCreate,
     ListItemResponse,
@@ -36,7 +38,10 @@ async def list_task_lists(
     category: ListCategory | None = Query(None),
     include_archived: bool = Query(False),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> list[TaskList]:
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     stmt = (
         select(TaskList)
         .options(selectinload(TaskList.items))
@@ -58,6 +63,7 @@ async def list_task_lists(
 async def get_task_list(
     list_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> TaskList:
     stmt = (
         select(TaskList)
@@ -68,6 +74,8 @@ async def get_task_list(
     task_list = result.scalar_one_or_none()
     if task_list is None:
         raise HTTPException(status_code=404, detail="List not found")
+    if task_list.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     return _enrich(task_list)
 
 
@@ -78,7 +86,10 @@ async def get_task_list(
 async def create_task_list(
     payload: TaskListCreate,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> TaskList:
+    if current_profile.household_id != payload.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     task_list = TaskList(
         household_id=payload.household_id,
         name=payload.name,
@@ -105,6 +116,7 @@ async def update_task_list(
     list_id: uuid.UUID,
     payload: TaskListUpdate,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> TaskList:
     stmt = (
         select(TaskList)
@@ -115,6 +127,8 @@ async def update_task_list(
     task_list = result.scalar_one_or_none()
     if task_list is None:
         raise HTTPException(status_code=404, detail="List not found")
+    if task_list.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(task_list, field, value)
@@ -131,13 +145,17 @@ async def update_task_list(
 async def delete_task_list(
     list_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> None:
     stmt = select(TaskList).where(TaskList.id == list_id)
     result = await db.execute(stmt)
     task_list = result.scalar_one_or_none()
     if task_list is None:
         raise HTTPException(status_code=404, detail="List not found")
+    if task_list.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
     await db.delete(task_list)
+    await db.flush()
 
 
 # ── Add item to list ────────────────────────────────────────────────────────
@@ -148,12 +166,15 @@ async def add_item(
     list_id: uuid.UUID,
     payload: ListItemCreate,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> ListItem:
-    # Verify list exists
     stmt = select(TaskList).where(TaskList.id == list_id)
     result = await db.execute(stmt)
-    if result.scalar_one_or_none() is None:
+    task_list = result.scalar_one_or_none()
+    if task_list is None:
         raise HTTPException(status_code=404, detail="List not found")
+    if task_list.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     item = ListItem(
         list_id=list_id,
@@ -178,6 +199,7 @@ async def update_item(
     item_id: uuid.UUID,
     payload: ListItemUpdate,
     db: AsyncSession = Depends(get_db),
+    _: Profile = Depends(get_current_profile),
 ) -> ListItem:
     stmt = select(ListItem).where(ListItem.id == item_id, ListItem.list_id == list_id)
     result = await db.execute(stmt)
@@ -201,6 +223,7 @@ async def delete_item(
     list_id: uuid.UUID,
     item_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    _: Profile = Depends(get_current_profile),
 ) -> None:
     stmt = select(ListItem).where(ListItem.id == item_id, ListItem.list_id == list_id)
     result = await db.execute(stmt)
@@ -208,6 +231,7 @@ async def delete_item(
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     await db.delete(item)
+    await db.flush()
 
 
 # ── Toggle item checked ─────────────────────────────────────────────────────
@@ -218,6 +242,7 @@ async def toggle_item(
     list_id: uuid.UUID,
     item_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    _: Profile = Depends(get_current_profile),
 ) -> ListItem:
     stmt = select(ListItem).where(ListItem.id == item_id, ListItem.list_id == list_id)
     result = await db.execute(stmt)
@@ -239,6 +264,7 @@ async def reorder_items(
     list_id: uuid.UUID,
     payload: ReorderPayload,
     db: AsyncSession = Depends(get_db),
+    _: Profile = Depends(get_current_profile),
 ) -> list[ListItem]:
     # Verify list exists
     stmt = select(TaskList).where(TaskList.id == list_id)
@@ -266,5 +292,10 @@ async def reorder_items(
     for item in items_by_id.values():
         await db.refresh(item)
 
-    # Return in new order
-    return [items_by_id[item_id] for item_id in payload.item_ids if item_id in items_by_id]
+    # Return all items in new order (submitted items first, then any remaining)
+    ordered = [items_by_id[item_id] for item_id in payload.item_ids]
+    remaining = sorted(
+        [item for iid, item in items_by_id.items() if iid not in set(payload.item_ids)],
+        key=lambda i: i.sort_order,
+    )
+    return ordered + remaining
