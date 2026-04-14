@@ -157,3 +157,13 @@ def auth_headers(sample_profile: Profile) -> dict[str, str]:
     """Return Authorization headers with a valid JWT for sample_profile."""
     token = _create_test_token(sample_profile.id, role=sample_profile.role.value)
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture()
+async def authed_client(
+    async_client: AsyncClient, auth_headers: dict[str, str]
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client with JWT auth headers pre-set."""
+    async_client.headers.update(auth_headers)
+    yield async_client
+    async_client.headers.pop("Authorization", None)

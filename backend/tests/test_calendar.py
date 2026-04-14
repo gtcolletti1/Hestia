@@ -51,9 +51,9 @@ def _event_payload(
 
 
 async def test_create_source_calendar(
-    async_client: AsyncClient, sample_household: Household
+    authed_client: AsyncClient, sample_household: Household
 ) -> None:
-    resp = await async_client.post(
+    resp = await authed_client.post(
         "/api/calendars",
         json={
             "household_id": str(sample_household.id),
@@ -72,10 +72,10 @@ async def test_create_source_calendar(
 
 
 async def test_create_event(
-    async_client: AsyncClient, source_calendar: SourceCalendar
+    authed_client: AsyncClient, source_calendar: SourceCalendar
 ) -> None:
     payload = _event_payload(source_calendar.id)
-    resp = await async_client.post("/api/events", json=payload)
+    resp = await authed_client.post("/api/events", json=payload)
     assert resp.status_code == 201
     body = resp.json()
     assert body["title"] == "Team Meeting"
@@ -83,7 +83,7 @@ async def test_create_event(
 
 
 async def test_list_events_by_date_range(
-    async_client: AsyncClient,
+    authed_client: AsyncClient,
     sample_household: Household,
     source_calendar: SourceCalendar,
 ) -> None:
@@ -91,13 +91,13 @@ async def test_list_events_by_date_range(
 
     # Create events at different dates
     for offset in (0, 2, 5):
-        await async_client.post(
+        await authed_client.post(
             "/api/events",
             json=_event_payload(source_calendar.id, f"Evt-{offset}", offset),
         )
 
     # Query a narrow range that should include only today and +2
-    resp = await async_client.get(
+    resp = await authed_client.get(
         "/api/events",
         params={
             "household_id": str(sample_household.id),
@@ -115,14 +115,14 @@ async def test_list_events_by_date_range(
 
 
 async def test_update_event(
-    async_client: AsyncClient, source_calendar: SourceCalendar
+    authed_client: AsyncClient, source_calendar: SourceCalendar
 ) -> None:
-    create = await async_client.post(
+    create = await authed_client.post(
         "/api/events", json=_event_payload(source_calendar.id)
     )
     event_id = create.json()["id"]
 
-    resp = await async_client.put(
+    resp = await authed_client.put(
         f"/api/events/{event_id}", json={"title": "Renamed Event"}
     )
     assert resp.status_code == 200
@@ -130,18 +130,18 @@ async def test_update_event(
 
 
 async def test_delete_event(
-    async_client: AsyncClient, source_calendar: SourceCalendar
+    authed_client: AsyncClient, source_calendar: SourceCalendar
 ) -> None:
-    create = await async_client.post(
+    create = await authed_client.post(
         "/api/events", json=_event_payload(source_calendar.id)
     )
     event_id = create.json()["id"]
 
-    resp = await async_client.delete(f"/api/events/{event_id}")
+    resp = await authed_client.delete(f"/api/events/{event_id}")
     assert resp.status_code == 204
 
 
-async def test_event_not_found(async_client: AsyncClient) -> None:
+async def test_event_not_found(authed_client: AsyncClient) -> None:
     fake_id = uuid.uuid4()
-    resp = await async_client.get(f"/api/events/{fake_id}")
+    resp = await authed_client.get(f"/api/events/{fake_id}")
     assert resp.status_code == 404

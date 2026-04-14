@@ -38,12 +38,12 @@ def _routine_payload(household_id: uuid.UUID, profile_id: uuid.UUID | None = Non
 
 
 async def test_create_routine_with_steps(
-    async_client: AsyncClient,
+    authed_client: AsyncClient,
     sample_household: Household,
     sample_profile: Profile,
 ) -> None:
     payload = _routine_payload(sample_household.id, sample_profile.id)
-    resp = await async_client.post("/api/routines", json=payload)
+    resp = await authed_client.post("/api/routines", json=payload)
     assert resp.status_code == 201
 
     body = resp.json()
@@ -54,17 +54,17 @@ async def test_create_routine_with_steps(
 
 
 async def test_list_routines(
-    async_client: AsyncClient,
+    authed_client: AsyncClient,
     sample_household: Household,
     sample_profile: Profile,
 ) -> None:
     # Create a routine first
-    await async_client.post(
+    await authed_client.post(
         "/api/routines",
         json=_routine_payload(sample_household.id, sample_profile.id),
     )
 
-    resp = await async_client.get(
+    resp = await authed_client.get(
         "/api/routines", params={"household_id": str(sample_household.id)}
     )
     assert resp.status_code == 200
@@ -75,12 +75,12 @@ async def test_list_routines(
 
 
 async def test_complete_step(
-    async_client: AsyncClient,
+    authed_client: AsyncClient,
     sample_household: Household,
     sample_profile: Profile,
 ) -> None:
     # Create routine with steps
-    create_resp = await async_client.post(
+    create_resp = await authed_client.post(
         "/api/routines",
         json=_routine_payload(sample_household.id, sample_profile.id),
     )
@@ -89,7 +89,7 @@ async def test_complete_step(
     step_id = routine["steps"][0]["id"]
 
     # Complete the first step
-    resp = await async_client.post(
+    resp = await authed_client.post(
         f"/api/routines/{routine_id}/steps/{step_id}/complete",
         params={"profile_id": str(sample_profile.id)},
     )
@@ -100,18 +100,18 @@ async def test_complete_step(
 
 
 async def test_get_streak(
-    async_client: AsyncClient,
+    authed_client: AsyncClient,
     sample_household: Household,
     sample_profile: Profile,
 ) -> None:
     # Create a routine
-    create_resp = await async_client.post(
+    create_resp = await authed_client.post(
         "/api/routines",
         json=_routine_payload(sample_household.id, sample_profile.id),
     )
     routine_id = create_resp.json()["id"]
 
-    resp = await async_client.get(
+    resp = await authed_client.get(
         f"/api/routines/{routine_id}/streak",
         params={"profile_id": str(sample_profile.id)},
     )
