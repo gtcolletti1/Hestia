@@ -202,7 +202,7 @@ export const meals = {
   delete: (mealId: string) => client.delete(`/meals/${mealId}`),
 
   getWeekly: (householdId: string, weekStart: string) =>
-    client.get<MealPlan[]>("/meals/week", {
+    client.get<{ week_start: string; days: Array<{ date: string; meals: MealPlan[] }> }>("/meals/week", {
       params: { household_id: householdId, week_start: weekStart },
     }),
 };
@@ -239,7 +239,7 @@ export const admin = {
 
 export const auth = {
   login: (data: { profile_id: string; pin: string }) =>
-    client.post<{ access_token: string; token_type: string; profile: Record<string, unknown> }>("/auth/login", data),
+    client.post<{ access_token: string; token_type: string; profile: { id: string; name: string; role: "admin" | "standard" | "kid"; color: string; avatar_url?: string; household_id: string } }>("/auth/login", data),
 
   me: () => client.get<Profile>("/auth/me"),
 };

@@ -11,9 +11,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.api.auth import get_current_profile
 from app.database import get_db
 from app.models.integration import OAuthCredential, OAuthProvider
 from app.models.calendar import SourceCalendar, CalendarProvider
+from app.models.user import Profile
 from app.tasks.calendar_sync import sync_all_calendars_task, sync_single_calendar_task
 
 import httpx
@@ -217,6 +219,7 @@ async def microsoft_callback(
 async def trigger_sync(
     source_calendar_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> dict:
     """Trigger a manual sync for a single source calendar."""
     cal = await db.get(SourceCalendar, source_calendar_id)
@@ -225,6 +228,8 @@ async def trigger_sync(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Source calendar not found",
         )
+    if cal.household_id != current_profile.household_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     sync_single_calendar_task.delay(str(source_calendar_id))
     return {"status": "sync_queued", "calendar_id": str(source_calendar_id)}
@@ -233,8 +238,11 @@ async def trigger_sync(
 @router.get("/integrations/calendars/sync-all")
 async def trigger_sync_all(
     household_id: uuid.UUID = Query(...),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> dict:
     """Trigger sync for all external calendars in a household."""
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     sync_all_calendars_task.delay(str(household_id))
     return {"status": "sync_queued", "household_id": str(household_id)}
 
@@ -246,8 +254,11 @@ async def trigger_sync_all(
 async def integration_status(
     household_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> dict:
     """Get integration status showing which providers are connected."""
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     stmt = select(OAuthCredential).where(
         OAuthCredential.household_id == household_id
     )

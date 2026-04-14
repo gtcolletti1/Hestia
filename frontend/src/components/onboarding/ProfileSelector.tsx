@@ -30,7 +30,7 @@ export default function ProfileSelector() {
     try {
       // Try login without PIN first (works if no PIN is set)
       const { data } = await auth.login({ profile_id: profile.id, pin: "" });
-      authStore.login(data.access_token, data.profile as unknown as Parameters<typeof authStore.login>[1]);
+      authStore.login(data.access_token, data.profile);
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 401) {
@@ -52,7 +52,7 @@ export default function ProfileSelector() {
 
     try {
       const { data } = await auth.login({ profile_id: selectedProfile.id, pin });
-      authStore.login(data.access_token, data.profile as unknown as Parameters<typeof authStore.login>[1]);
+      authStore.login(data.access_token, data.profile);
     } catch {
       setError("Incorrect PIN. Please try again.");
       setPin("");

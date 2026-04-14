@@ -199,8 +199,14 @@ async def update_item(
     item_id: uuid.UUID,
     payload: ListItemUpdate,
     db: AsyncSession = Depends(get_db),
-    _: Profile = Depends(get_current_profile),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> ListItem:
+    task_list = await db.get(TaskList, list_id)
+    if task_list is None:
+        raise HTTPException(status_code=404, detail="List not found")
+    if task_list.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     stmt = select(ListItem).where(ListItem.id == item_id, ListItem.list_id == list_id)
     result = await db.execute(stmt)
     item = result.scalar_one_or_none()
@@ -223,8 +229,14 @@ async def delete_item(
     list_id: uuid.UUID,
     item_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: Profile = Depends(get_current_profile),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> None:
+    task_list = await db.get(TaskList, list_id)
+    if task_list is None:
+        raise HTTPException(status_code=404, detail="List not found")
+    if task_list.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     stmt = select(ListItem).where(ListItem.id == item_id, ListItem.list_id == list_id)
     result = await db.execute(stmt)
     item = result.scalar_one_or_none()
@@ -242,8 +254,14 @@ async def toggle_item(
     list_id: uuid.UUID,
     item_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: Profile = Depends(get_current_profile),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> ListItem:
+    task_list = await db.get(TaskList, list_id)
+    if task_list is None:
+        raise HTTPException(status_code=404, detail="List not found")
+    if task_list.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     stmt = select(ListItem).where(ListItem.id == item_id, ListItem.list_id == list_id)
     result = await db.execute(stmt)
     item = result.scalar_one_or_none()
@@ -264,13 +282,16 @@ async def reorder_items(
     list_id: uuid.UUID,
     payload: ReorderPayload,
     db: AsyncSession = Depends(get_db),
-    _: Profile = Depends(get_current_profile),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> list[ListItem]:
-    # Verify list exists
+    # Verify list exists and belongs to same household
     stmt = select(TaskList).where(TaskList.id == list_id)
     result = await db.execute(stmt)
-    if result.scalar_one_or_none() is None:
+    task_list = result.scalar_one_or_none()
+    if task_list is None:
         raise HTTPException(status_code=404, detail="List not found")
+    if task_list.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # Fetch all items for this list
     stmt = select(ListItem).where(ListItem.list_id == list_id)

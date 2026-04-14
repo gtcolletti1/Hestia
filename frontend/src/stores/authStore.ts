@@ -4,7 +4,7 @@ interface Profile {
   id: string;
   name: string;
   avatar?: string;
-  role: "admin" | "parent" | "child";
+  role: "admin" | "standard" | "kid";
 }
 
 interface AuthState {

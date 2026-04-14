@@ -54,7 +54,7 @@ export default function SetupWizard() {
         profile_id: profile.id,
         pin: "",
       });
-      authStore.login(loginData.access_token, loginData.profile as unknown as { id: string; name: string; role: "admin" | "parent" | "child" });
+      authStore.login(loginData.access_token, loginData.profile);
       setStep(3);
     } catch {
       setError("Failed to create profile. Please try again.");

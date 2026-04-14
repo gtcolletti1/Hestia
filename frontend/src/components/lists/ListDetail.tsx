@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { lists as listsApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
 import type { TaskList, ListItem } from "@/types";
 
 type List = TaskList;
@@ -14,6 +15,7 @@ interface Props {
 
 export default function ListDetail({ list, onClose, onEdit }: Props) {
   const queryClient = useQueryClient();
+  const profiles = useHouseholdStore((s) => s.profiles);
   const [newItemText, setNewItemText] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -156,7 +158,7 @@ export default function ListDetail({ list, onClose, onEdit }: Props) {
                   <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
                     {item.assigned_profile_id && (
                       <span className="rounded-full bg-purple-100 px-2 py-0.5 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                        {item.assigned_profile_id}
+                        {profiles.find((p) => p.id === item.assigned_profile_id)?.name || "Assigned"}
                       </span>
                     )}
                     {item.due_date && <span>Due {format(new Date(item.due_date), "MMM d")}</span>}

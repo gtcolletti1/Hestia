@@ -127,7 +127,7 @@ export default function DayView({ date }: DayViewProps) {
       </button>
 
       {selectedEvent && (
-        <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+        <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} profiles={profiles} />
       )}
       {showQuickAdd && (
         <QuickAddEvent onClose={() => setShowQuickAdd(false)} defaultDate={date} />

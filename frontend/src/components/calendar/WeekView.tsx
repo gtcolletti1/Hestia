@@ -148,7 +148,7 @@ export default function WeekView({ date }: WeekViewProps) {
       </div>
 
       {selectedEvent && (
-        <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+        <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} profiles={storeProfiles} />
       )}
     </div>
   );

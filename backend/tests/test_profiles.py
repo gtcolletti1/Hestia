@@ -73,9 +73,9 @@ async def test_get_profile(
 
 
 async def test_update_profile(
-    async_client: AsyncClient, sample_profile: Profile
+    authed_client: AsyncClient, sample_profile: Profile
 ) -> None:
-    resp = await async_client.put(
+    resp = await authed_client.put(
         f"/api/profiles/{sample_profile.id}",
         json={"name": "Updated Name", "color": "#000000"},
     )
@@ -86,9 +86,9 @@ async def test_update_profile(
 
 
 async def test_delete_profile(
-    async_client: AsyncClient, sample_household: Household
+    authed_client: AsyncClient, async_client: AsyncClient, sample_household: Household
 ) -> None:
-    # Create a disposable profile, then delete it
+    # Create a disposable profile (POST is unauthenticated), then delete it
     create_resp = await async_client.post(
         "/api/profiles",
         json={
@@ -99,7 +99,7 @@ async def test_delete_profile(
     )
     profile_id = create_resp.json()["id"]
 
-    resp = await async_client.delete(f"/api/profiles/{profile_id}")
+    resp = await authed_client.delete(f"/api/profiles/{profile_id}")
     assert resp.status_code == 204
 
     # Confirm it's gone

@@ -137,7 +137,7 @@ export default function AgendaView({ date }: AgendaViewProps) {
       )}
 
       {selectedEvent && (
-        <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+        <EventModal event={selectedEvent} onClose={() => setSelectedEvent(null)} profiles={storeProfiles} />
       )}
     </div>
   );

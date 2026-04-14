@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.api.auth import get_current_profile
 from app.database import get_db
 from app.models.user import Household, Profile
 from app.schemas.profile import (
@@ -64,10 +65,13 @@ async def update_profile(
     profile_id: uuid.UUID,
     data: ProfileUpdate,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> Profile:
     profile = await db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    if profile.household_id != current_profile.household_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
@@ -81,10 +85,13 @@ async def update_profile(
 async def delete_profile(
     profile_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> None:
     profile = await db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    if profile.household_id != current_profile.household_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     await db.delete(profile)
     await db.flush()
 
