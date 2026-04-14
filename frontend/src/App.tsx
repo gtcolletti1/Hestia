@@ -4,7 +4,9 @@ import AppShell from "@/components/layout/AppShell";
 import KioskWrapper from "@/components/layout/KioskWrapper";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import SetupWizard from "@/components/onboarding/SetupWizard";
+import ProfileSelector from "@/components/onboarding/ProfileSelector";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useAuthStore } from "@/stores/authStore";
 
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const CalendarPage = lazy(() => import("@/pages/CalendarPage"));
@@ -18,6 +20,7 @@ export default function App() {
   const householdId = useHouseholdStore((s) => s.householdId);
   const profiles = useHouseholdStore((s) => s.profiles);
   const fetchProfiles = useHouseholdStore((s) => s.fetchProfiles);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
     if (householdId && profiles.length === 0) {
@@ -25,10 +28,20 @@ export default function App() {
     }
   }, [householdId, profiles.length, fetchProfiles]);
 
+  // No household yet → show setup wizard
   if (!householdId) {
     return (
       <KioskWrapper>
         <SetupWizard />
+      </KioskWrapper>
+    );
+  }
+
+  // Household exists but not logged in → show profile selector
+  if (!isAuthenticated) {
+    return (
+      <KioskWrapper>
+        <ProfileSelector />
       </KioskWrapper>
     );
   }

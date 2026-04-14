@@ -140,12 +140,9 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
         )
 
     if not profile.pin_hash:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="PIN not set for this profile",
-        )
-
-    if not pwd_context.verify(body.pin, profile.pin_hash):
+        # No PIN set — allow passwordless login (first-time / family hub mode)
+        pass
+    elif not pwd_context.verify(body.pin, profile.pin_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid profile or PIN",

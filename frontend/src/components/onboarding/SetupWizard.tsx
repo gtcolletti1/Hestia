@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { households, profiles as profilesApi } from "@/api/endpoints";
+import { households, profiles as profilesApi, auth } from "@/api/endpoints";
 import client from "@/api/client";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useAuthStore } from "@/stores/authStore";
 
 const PRESET_COLORS = [
   "#EF4444", "#F97316", "#F59E0B", "#EAB308",
@@ -20,6 +21,7 @@ export default function SetupWizard() {
   const [error, setError] = useState<string | null>(null);
 
   const store = useHouseholdStore();
+  const authStore = useAuthStore();
 
   const createHousehold = async () => {
     if (!householdName.trim()) return;
@@ -41,12 +43,18 @@ export default function SetupWizard() {
     setLoading(true);
     setError(null);
     try {
-      await profilesApi.create({
+      const { data: profile } = await profilesApi.create({
         name: profileName.trim(),
         color: profileColor,
         role: "admin",
         household_id: householdId,
       });
+      // Auto-login with the new profile (no PIN needed on first setup)
+      const { data: loginData } = await auth.login({
+        profile_id: profile.id,
+        pin: "",
+      });
+      authStore.login(loginData.access_token, loginData.profile as unknown as { id: string; name: string; role: "admin" | "parent" | "child" });
       setStep(3);
     } catch {
       setError("Failed to create profile. Please try again.");

@@ -237,7 +237,7 @@ export const admin = {
 
 export const auth = {
   login: (data: { profile_id: string; pin: string }) =>
-    client.post<{ token: string }>("/auth/login", data),
+    client.post<{ access_token: string; token_type: string; profile: Record<string, unknown> }>("/auth/login", data),
 
   me: () => client.get<Profile>("/auth/me"),
 };
