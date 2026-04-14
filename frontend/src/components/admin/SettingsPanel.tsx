@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { admin, integrations as integrationsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
@@ -49,7 +50,9 @@ const ACCENT_COLORS = [
 ];
 
 export default function SettingsPanel() {
+  const navigate = useNavigate();
   const householdId = useHouseholdStore((s) => s.householdId);
+  const setHouseholdName = useHouseholdStore((s) => s.setHouseholdName);
   const queryClient = useQueryClient();
   const { data: settings } = useQuery({
     queryKey: ["settings", householdId],
@@ -73,6 +76,7 @@ export default function SettingsPanel() {
   });
 
   const [form, setForm] = useState<HouseholdSettings>(settings);
+  const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
     setForm(settings);
@@ -81,22 +85,25 @@ export default function SettingsPanel() {
   const saveMutation = useMutation({
     mutationFn: (data: HouseholdSettings) =>
       admin.updateSettings(householdId!, data as unknown as Record<string, unknown>),
-    onSuccess: () => {
+    onSuccess: (_resp, submittedData) => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
+      setHouseholdName(submittedData.name);
+      setShowSaved(true);
+      setTimeout(() => setShowSaved(false), 2500);
     },
   });
 
   const moduleMutation = useMutation({
     mutationFn: (data: { module: string; enabled: boolean }) =>
-      admin.toggleModule(data),
+      admin.toggleModule(householdId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
   });
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     saveMutation.mutate(form);
-  };
+  }, [form, saveMutation]);
 
   const updateModules = (
     key: keyof HouseholdSettings["modules_enabled"],
@@ -141,9 +148,22 @@ export default function SettingsPanel() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
-      <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-        Settings
-      </h2>
+      {/* Header with back button */}
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          className="flex items-center justify-center rounded-lg p-2 -ml-2 text-gray-500 hover:bg-gray-100 active:bg-gray-200 dark:text-gray-400 dark:hover:bg-gray-700 dark:active:bg-gray-600 transition-colors min-h-[44px] min-w-[44px]"
+          aria-label="Back to dashboard"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          Settings
+        </h2>
+      </div>
 
       {/* Household */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
@@ -415,7 +435,7 @@ export default function SettingsPanel() {
         >
           {saveMutation.isPending ? "Saving..." : "Save Settings"}
         </button>
-        {saveMutation.isSuccess && (
+        {showSaved && (
           <p className="text-center text-sm text-green-600 dark:text-green-400 mt-2">
             Settings saved!
           </p>

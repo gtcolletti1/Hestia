@@ -229,8 +229,10 @@ export const admin = {
       params: { household_id: householdId },
     }),
 
-  toggleModule: (data: { module: string; enabled: boolean }) =>
-    client.patch("/admin/modules", data),
+  toggleModule: (householdId: string, data: { module: string; enabled: boolean }) =>
+    client.patch("/admin/modules", data, {
+      params: { household_id: householdId },
+    }),
 };
 
 // --- Auth ---
