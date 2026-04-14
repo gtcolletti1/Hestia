@@ -167,3 +167,71 @@ async def authed_client(
     async_client.headers.update(auth_headers)
     yield async_client
     async_client.headers.pop("Authorization", None)
+
+
+# ---------------------------------------------------------------------------
+# Second household fixtures (for cross-household tests)
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture()
+async def second_household(db_session: AsyncSession) -> Household:
+    """Create a second household for cross-household testing."""
+    household = Household(name="Other Family")
+    db_session.add(household)
+    await db_session.flush()
+    await db_session.refresh(household)
+    return household
+
+
+@pytest_asyncio.fixture()
+async def second_profile(
+    db_session: AsyncSession, second_household: Household
+) -> Profile:
+    """Create an admin profile in the second household."""
+    profile = Profile(
+        household_id=second_household.id,
+        name="Other Admin",
+        color="#33FF57",
+        role=ProfileRole.admin,
+        pin_hash=pwd_context.hash("5678"),
+        is_active=True,
+    )
+    db_session.add(profile)
+    await db_session.flush()
+    await db_session.refresh(profile)
+    return profile
+
+
+@pytest_asyncio.fixture()
+def second_auth_headers(second_profile: Profile) -> dict[str, str]:
+    """Return Authorization headers for the second household's profile."""
+    token = _create_test_token(second_profile.id, role=second_profile.role.value)
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture()
+async def second_authed_client(
+    db_session: AsyncSession, second_profile: Profile, second_auth_headers: dict[str, str]
+) -> AsyncIterator[AsyncClient]:
+    """Async HTTP client authenticated as a profile in the second household."""
+    from app.main import app
+    import app.api.auth as auth_module
+
+    override_settings = _settings_override()
+    app.dependency_overrides[get_settings] = lambda: override_settings
+    original_auth_settings = auth_module.settings
+    auth_module.settings = override_settings
+
+    async def _override_get_db() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        ac.headers.update(second_auth_headers)
+        yield ac
+
+    app.dependency_overrides.clear()
+    auth_module.settings = original_auth_settings

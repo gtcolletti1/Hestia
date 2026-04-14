@@ -251,7 +251,7 @@ async def complete_step(
     step_id: uuid.UUID,
     profile_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
-    _: Profile = Depends(get_current_profile),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> RoutineCompletion:
     # Verify routine and step exist
     stmt = (
@@ -263,6 +263,8 @@ async def complete_step(
     routine = result.scalar_one_or_none()
     if routine is None:
         raise HTTPException(status_code=404, detail="Routine not found")
+    if routine.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     step_ids = {str(s.id) for s in routine.steps}
     if str(step_id) not in step_ids:
@@ -312,8 +314,14 @@ async def get_streak(
     routine_id: uuid.UUID,
     profile_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
-    _: Profile = Depends(get_current_profile),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> StreakInfo:
+    routine = await db.get(Routine, routine_id)
+    if routine is None:
+        raise HTTPException(status_code=404, detail="Routine not found")
+    if routine.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
     stmt = (
         select(RoutineCompletion)
         .where(

@@ -179,8 +179,7 @@ async def test_cross_household_item_update(
         json={"text": "Hacked by B"},
         headers=headers_b,
     )
-    # Document current behaviour — ideally this should be 403
-    assert resp.status_code in (200, 403)
+    assert resp.status_code == 403
 
 
 async def test_cross_household_list_access(
