@@ -4,6 +4,105 @@ import { routines as routinesApi, profiles as profilesApi } from "@/api/endpoint
 import { useHouseholdStore } from "@/stores/householdStore";
 import type { Routine } from "@/types";
 
+/** Convert "HH:MM" or "HH:MM:SS" (24h) → { hour12, minute, period } */
+function parse24(value: string): { hour12: number; minute: number; period: "AM" | "PM" } {
+  if (!value) return { hour12: 12, minute: 0, period: "AM" };
+  const [hStr, mStr] = value.split(":");
+  let h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10) || 0;
+  const period: "AM" | "PM" = h >= 12 ? "PM" : "AM";
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return { hour12: h, minute: m, period };
+}
+
+/** Convert { hour12, minute, period } → "HH:MM" (24h) for the API */
+function to24(hour12: number, minute: number, period: "AM" | "PM"): string {
+  let h = hour12;
+  if (period === "AM" && h === 12) h = 0;
+  else if (period === "PM" && h !== 12) h += 12;
+  return `${String(h).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+const HOURS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const MINUTES = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
+function TimePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parsed = parse24(value);
+  const [hour, setHour] = useState(parsed.hour12);
+  const [minute, setMinute] = useState(parsed.minute);
+  const [period, setPeriod] = useState<"AM" | "PM">(parsed.period);
+  const hasValue = !!value;
+
+  const emit = (h: number, m: number, p: "AM" | "PM") => onChange(to24(h, m, p));
+
+  const selCls = (active: boolean) =>
+    `min-h-[44px] min-w-[44px] rounded-xl border-2 px-3 py-2 text-sm font-semibold transition active:scale-95 ${
+      active
+        ? "border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300"
+        : "border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+    }`;
+
+  return (
+    <div className="space-y-3">
+      {/* Hour */}
+      <div>
+        <span className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Hour</span>
+        <div className="flex flex-wrap gap-1.5">
+          {HOURS.map((h) => (
+            <button
+              key={h}
+              type="button"
+              onClick={() => { setHour(h); emit(h, minute, period); }}
+              className={selCls(hasValue && hour === h)}
+            >
+              {h}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* Minute */}
+      <div>
+        <span className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">Minute</span>
+        <div className="flex flex-wrap gap-1.5">
+          {MINUTES.map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setMinute(m); emit(hour, m, period); }}
+              className={selCls(hasValue && minute === m)}
+            >
+              :{String(m).padStart(2, "0")}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* AM / PM */}
+      <div className="flex items-center gap-2">
+        {(["AM", "PM"] as const).map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => { setPeriod(p); emit(hour, minute, p); }}
+            className={selCls(hasValue && period === p)}
+          >
+            {p}
+          </button>
+        ))}
+        {hasValue && (
+          <button
+            type="button"
+            onClick={() => { onChange(""); }}
+            className="ml-auto text-sm text-gray-400 hover:text-red-500"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface ProfileOption {
   id: string;
   name: string;
@@ -210,17 +309,11 @@ export default function RoutineForm({ routine, onClose, onSaved, onDeleted }: Pr
 
       {/* Start Time */}
       <div>
-        <label htmlFor="start-time" className="mb-1 block text-sm font-medium">
+        <span className="mb-2 block text-sm font-medium">
           Start Time{" "}
           <span className="text-gray-400">(optional)</span>
-        </label>
-        <input
-          id="start-time"
-          type="time"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          className="touch-target rounded-xl border border-gray-300 px-4 py-2 text-base dark:border-gray-600 dark:bg-gray-800"
-        />
+        </span>
+        <TimePicker value={startTime} onChange={setStartTime} />
       </div>
 
       {/* Profile Selector */}
