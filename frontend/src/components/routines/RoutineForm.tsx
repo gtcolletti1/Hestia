@@ -33,6 +33,7 @@ interface Props {
   routine?: Routine;
   onClose: () => void;
   onSaved: () => void;
+  onDeleted?: () => void;
 }
 
 let stepKeyCounter = 0;
@@ -40,7 +41,7 @@ function newStepKey() {
   return `step-${++stepKeyCounter}-${Date.now()}`;
 }
 
-export default function RoutineForm({ routine, onClose, onSaved }: Props) {
+export default function RoutineForm({ routine, onClose, onSaved, onDeleted }: Props) {
   const queryClient = useQueryClient();
   const householdId = useHouseholdStore((s) => s.householdId);
   const isEditing = !!routine;
@@ -84,6 +85,15 @@ export default function RoutineForm({ routine, onClose, onSaved }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["routines"] });
       onSaved();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => routinesApi.delete(routine!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+      if (onDeleted) onDeleted();
+      else onClose();
     },
   });
 
@@ -367,6 +377,21 @@ export default function RoutineForm({ routine, onClose, onSaved }: Props) {
         <p className="text-center text-sm text-red-600 dark:text-red-400">
           Failed to save routine. Please try again.
         </p>
+      )}
+
+      {isEditing && (
+        <button
+          type="button"
+          onClick={() => {
+            if (confirm(`Delete "${routine.name}"? This cannot be undone.`)) {
+              deleteMutation.mutate();
+            }
+          }}
+          disabled={deleteMutation.isPending}
+          className="mt-2 min-h-[48px] w-full rounded-xl bg-red-100 py-3 font-semibold text-red-600 hover:bg-red-200 disabled:opacity-50 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50"
+        >
+          {deleteMutation.isPending ? "Deleting…" : "Delete Routine"}
+        </button>
       )}
     </form>
   );
