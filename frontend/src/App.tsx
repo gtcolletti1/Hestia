@@ -16,6 +16,7 @@ const MealsPage = lazy(() => import("@/pages/MealsPage"));
 const ProfilesPage = lazy(() => import("@/pages/ProfilesPage"));
 const AdminPage = lazy(() => import("@/pages/AdminPage"));
 const MessagesPage = lazy(() => import("@/pages/MessagesPage"));
+const RewardsPage = lazy(() => import("@/pages/RewardsPage"));
 
 export default function App() {
   const householdId = useHouseholdStore((s) => s.householdId);
@@ -59,6 +60,7 @@ export default function App() {
             <Route path="meals" element={<MealsPage />} />
             <Route path="profiles" element={<ProfilesPage />} />
             <Route path="messages" element={<MessagesPage />} />
+            <Route path="rewards" element={<RewardsPage />} />
             <Route path="admin" element={<AdminPage />} />
           </Route>
         </Routes>

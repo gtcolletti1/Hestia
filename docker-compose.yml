@@ -40,6 +40,8 @@ services:
     env_file: .env
     expose:
       - "8000"
+    volumes:
+      - upload_photos:/app/uploads/photos
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,6 +106,7 @@ services:
 
 volumes:
   pgdata:
+  upload_photos:
 
 networks:
   familyhub:

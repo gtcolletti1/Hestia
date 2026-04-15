@@ -6,6 +6,9 @@ from sqlalchemy import engine_from_config, pool
 from app.config import get_settings
 from app.database import Base
 
+# Import all models so Base.metadata includes all tables
+import app.models  # noqa: F401
+
 # Alembic Config object
 config = context.config
 

@@ -15,6 +15,7 @@ interface StepInput {
   key: string;
   label: string;
   icon: string;
+  points_value: number;
 }
 
 type TimeBlock = "morning" | "afternoon" | "evening" | "bedtime";
@@ -58,7 +59,8 @@ export default function RoutineForm({ routine, onClose, onSaved }: Props) {
       key: s.id,
       label: s.label,
       icon: s.icon ?? "",
-    })) ?? [{ key: newStepKey(), label: "", icon: "" }],
+      points_value: s.points_value ?? 0,
+    })) ?? [{ key: newStepKey(), label: "", icon: "", points_value: 0 }],
   );
 
   const { data: profiles = [] } = useQuery<ProfileOption[]>({
@@ -94,7 +96,7 @@ export default function RoutineForm({ routine, onClose, onSaved }: Props) {
   };
 
   const addStep = () =>
-    setSteps((prev) => [...prev, { key: newStepKey(), label: "", icon: "" }]);
+    setSteps((prev) => [...prev, { key: newStepKey(), label: "", icon: "", points_value: 0 }]);
 
   const removeStep = (key: string) =>
     setSteps((prev) => prev.filter((s) => s.key !== key));
@@ -123,6 +125,7 @@ export default function RoutineForm({ routine, onClose, onSaved }: Props) {
         label: s.label.trim(),
         icon: s.icon || undefined,
         sort_order: i,
+        points_value: s.points_value,
       }));
 
     saveMutation.mutate({
@@ -294,6 +297,26 @@ export default function RoutineForm({ routine, onClose, onSaved }: Props) {
                 placeholder={`Step ${index + 1}`}
                 className="touch-target flex-1 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-800"
               />
+
+              {/* Points */}
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  min={0}
+                  value={step.points_value}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setSteps((prev) =>
+                      prev.map((s) =>
+                        s.key === step.key ? { ...s, points_value: val } : s,
+                      ),
+                    );
+                  }}
+                  className="touch-target w-14 rounded-lg border border-gray-300 text-center text-sm dark:border-gray-600 dark:bg-gray-800"
+                  title="Points for completing this step"
+                />
+                <span className="text-xs text-gray-400">⭐</span>
+              </div>
 
               {/* Remove */}
               <button

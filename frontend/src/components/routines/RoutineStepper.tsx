@@ -23,10 +23,12 @@ export default function RoutineStepper({ routine, onClose }: Props) {
         .map((s) => ({ ...s, completed: false })),
   );
   const [showCelebration, setShowCelebration] = useState(false);
+  const [earnedPoints, setEarnedPoints] = useState(0);
 
   const completedCount = steps.filter((s) => s.completed).length;
   const totalCount = steps.length;
   const allDone = totalCount > 0 && completedCount === totalCount;
+  const totalPointsAvailable = steps.reduce((sum, s) => sum + (s.points_value || 0), 0);
 
   useEffect(() => {
     if (allDone) setShowCelebration(true);
@@ -44,6 +46,10 @@ export default function RoutineStepper({ routine, onClose }: Props) {
   });
 
   const handleToggle = (stepId: string) => {
+    const step = steps.find((s) => s.id === stepId);
+    if (step && !step.completed && step.points_value > 0) {
+      setEarnedPoints((prev) => prev + step.points_value);
+    }
     setSteps((prev) =>
       prev.map((s) =>
         s.id === stepId ? { ...s, completed: !s.completed } : s,
@@ -110,12 +116,19 @@ export default function RoutineStepper({ routine, onClose }: Props) {
           <span>
             {completedCount}/{totalCount} steps
           </span>
-          <span>
-            {totalCount > 0
-              ? Math.round((completedCount / totalCount) * 100)
-              : 0}
-            %
-          </span>
+          <div className="flex items-center gap-3">
+            {totalPointsAvailable > 0 && (
+              <span className="text-amber-600 dark:text-amber-400">
+                {earnedPoints}/{totalPointsAvailable} ⭐
+              </span>
+            )}
+            <span>
+              {totalCount > 0
+                ? Math.round((completedCount / totalCount) * 100)
+                : 0}
+              %
+            </span>
+          </div>
         </div>
         <div className="mt-1 h-3 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
           <div
@@ -176,6 +189,19 @@ export default function RoutineStepper({ routine, onClose }: Props) {
               >
                 {step.label}
               </span>
+
+              {/* Points badge */}
+              {step.points_value > 0 && (
+                <span
+                  className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold tabular-nums ${
+                    step.completed
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                  }`}
+                >
+                  {step.completed ? "+" : ""}{step.points_value} ⭐
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -187,6 +213,11 @@ export default function RoutineStepper({ routine, onClose }: Props) {
             <h2 className="text-2xl font-bold text-green-700 dark:text-green-400">
               All done!
             </h2>
+            {earnedPoints > 0 && (
+              <p className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                +{earnedPoints} ⭐ earned!
+              </p>
+            )}
             <p className="text-gray-600 dark:text-gray-400">
               Great job finishing your routine!
             </p>

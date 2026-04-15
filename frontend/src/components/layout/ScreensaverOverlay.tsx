@@ -12,9 +12,10 @@ interface Photo {
 
 interface ScreensaverOverlayProps {
   onDismiss: () => void;
+  transitionSeconds?: number;
 }
 
-export default function ScreensaverOverlay({ onDismiss }: ScreensaverOverlayProps) {
+export default function ScreensaverOverlay({ onDismiss, transitionSeconds = 10 }: ScreensaverOverlayProps) {
   const householdId = useHouseholdStore((s) => s.householdId);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [now, setNow] = useState(new Date());
@@ -35,14 +36,14 @@ export default function ScreensaverOverlay({ onDismiss }: ScreensaverOverlayProp
     return () => clearInterval(interval);
   }, []);
 
-  // Rotate photos every 10 seconds
+  // Rotate photos based on configured transition speed
   useEffect(() => {
     if (photoList.length <= 1) return;
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % photoList.length);
-    }, 10_000);
+    }, transitionSeconds * 1000);
     return () => clearInterval(interval);
-  }, [photoList.length]);
+  }, [photoList.length, transitionSeconds]);
 
   const handleDismiss = useCallback(
     (e: React.MouseEvent | React.TouchEvent | React.KeyboardEvent) => {

@@ -40,6 +40,7 @@ export interface RoutineStep {
   label: string;
   icon?: string;
   sort_order: number;
+  points_value: number;
 }
 
 export interface RoutineCompletion {

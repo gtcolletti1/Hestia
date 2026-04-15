@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef, useCallback, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { admin } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
 import ScreensaverOverlay from "./ScreensaverOverlay";
 
 interface KioskWrapperProps {
@@ -6,13 +9,26 @@ interface KioskWrapperProps {
 }
 
 const CURSOR_HIDE_MS = 5000;
-const SCREENSAVER_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 
 export default function KioskWrapper({ children }: KioskWrapperProps) {
+  const householdId = useHouseholdStore((s) => s.householdId);
   const cursorTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const screensaverTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [screensaverActive, setScreensaverActive] = useState(false);
+
+  const { data: settings } = useQuery({
+    queryKey: ["settings", householdId],
+    queryFn: () => admin.getSettings(householdId!).then((r) => r.data as {
+      screensaver_timeout_minutes?: number;
+      screensaver_transition_seconds?: number;
+    }),
+    enabled: !!householdId,
+    staleTime: 60_000,
+  });
+
+  const timeoutMs = (settings?.screensaver_timeout_minutes ?? 2) * 60 * 1000;
+  const transitionSeconds = settings?.screensaver_transition_seconds ?? 10;
 
   const resetTimers = useCallback(() => {
     const el = containerRef.current;
@@ -24,12 +40,12 @@ export default function KioskWrapper({ children }: KioskWrapperProps) {
       if (el) el.style.cursor = "none";
     }, CURSOR_HIDE_MS);
 
-    // Screensaver: activate after 2 min idle
+    // Screensaver: activate after configured idle time
     clearTimeout(screensaverTimerRef.current);
     screensaverTimerRef.current = setTimeout(() => {
       setScreensaverActive(true);
-    }, SCREENSAVER_TIMEOUT_MS);
-  }, []);
+    }, timeoutMs);
+  }, [timeoutMs]);
 
   const dismissScreensaver = useCallback(() => {
     setScreensaverActive(false);
@@ -65,7 +81,10 @@ export default function KioskWrapper({ children }: KioskWrapperProps) {
     <div ref={containerRef} className="kiosk-wrapper h-screen w-screen">
       {children}
       {screensaverActive && (
-        <ScreensaverOverlay onDismiss={dismissScreensaver} />
+        <ScreensaverOverlay
+          onDismiss={dismissScreensaver}
+          transitionSeconds={transitionSeconds}
+        />
       )}
     </div>
   );

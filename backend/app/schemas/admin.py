@@ -25,6 +25,8 @@ class HouseholdSettings(BaseModel):
     weather_lat: float | None = None
     weather_lon: float | None = None
     weather_units: str = "imperial"  # "imperial" | "metric"
+    screensaver_timeout_minutes: int = 2
+    screensaver_transition_seconds: int = 10
 
 
 class HouseholdSettingsUpdate(BaseModel):
@@ -36,6 +38,8 @@ class HouseholdSettingsUpdate(BaseModel):
     weather_lat: float | None = None
     weather_lon: float | None = None
     weather_units: str | None = None
+    screensaver_timeout_minutes: int | None = None
+    screensaver_transition_seconds: int | None = None
 
 
 class ModuleToggle(BaseModel):

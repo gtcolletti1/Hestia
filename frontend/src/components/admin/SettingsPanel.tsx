@@ -22,6 +22,8 @@ interface HouseholdSettings {
   weather_lat: number | null;
   weather_lon: number | null;
   weather_units: string;
+  screensaver_timeout_minutes: number;
+  screensaver_transition_seconds: number;
 }
 
 interface IntegrationStatus {
@@ -44,6 +46,8 @@ const DEFAULT_SETTINGS: HouseholdSettings = {
   weather_lat: null,
   weather_lon: null,
   weather_units: "imperial",
+  screensaver_timeout_minutes: 2,
+  screensaver_transition_seconds: 10,
 };
 
 const ACCENT_COLORS = [
@@ -401,6 +405,68 @@ export default function SettingsPanel() {
         </div>
       </section>
 
+      {/* Screensaver Settings */}
+      <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+          🌙 Screensaver
+        </h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Idle Timeout
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={1}
+                max={30}
+                value={form.screensaver_timeout_minutes}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    screensaver_timeout_minutes: parseInt(e.target.value),
+                  }))
+                }
+                className="flex-1"
+              />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16 text-right tabular-nums">
+                {form.screensaver_timeout_minutes} min
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              How long before the screensaver activates
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Photo Transition Speed
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={3}
+                max={60}
+                step={1}
+                value={form.screensaver_transition_seconds}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    screensaver_transition_seconds: parseInt(e.target.value),
+                  }))
+                }
+                className="flex-1"
+              />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 w-16 text-right tabular-nums">
+                {form.screensaver_transition_seconds}s
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              Seconds between photo transitions
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Screensaver Photos */}
       <ScreensaverPhotosSection householdId={householdId} />
 
@@ -535,6 +601,7 @@ function ScreensaverPhotosSection({ householdId }: { householdId: string | null 
   const queryClient = useQueryClient();
   const [newUrl, setNewUrl] = useState("");
   const [newCaption, setNewCaption] = useState("");
+  const [uploading, setUploading] = useState(false);
 
   const { data: photoList = [] } = useQuery<{ id: string; url: string; caption: string | null; sort_order: number }[]>({
     queryKey: ["photos", householdId],
@@ -566,6 +633,26 @@ function ScreensaverPhotosSection({ householdId }: { householdId: string | null 
     });
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !householdId) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("household_id", householdId);
+      formData.append("caption", newCaption.trim());
+      await photosApi.upload(formData);
+      queryClient.invalidateQueries({ queryKey: ["photos"] });
+      setNewCaption("");
+    } catch {
+      // handle error silently
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
   return (
     <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -576,7 +663,33 @@ function ScreensaverPhotosSection({ householdId }: { householdId: string | null 
       </p>
 
       {/* Add photo form */}
-      <div className="flex flex-col gap-2 mb-4">
+      <div className="space-y-3 mb-4">
+        {/* File upload */}
+        <div>
+          <label className="flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/50 px-4 py-3 text-sm font-medium text-gray-600 dark:text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-600 transition min-h-[44px]">
+            {uploading ? (
+              "Uploading…"
+            ) : (
+              <>📷 Upload Photo</>
+            )}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={handleFileUpload}
+              disabled={uploading}
+            />
+          </label>
+        </div>
+
+        {/* OR divider */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+          <span className="text-xs text-gray-400">or add by URL</span>
+          <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+        </div>
+
+        {/* URL input */}
         <input
           type="url"
           placeholder="Photo URL (https://...)"
