@@ -16,6 +16,7 @@ export interface Event {
   start_time: string;
   end_time: string;
   all_day: boolean;
+  recurrence_rule?: string;
   color?: string;
   is_private: boolean;
   source_calendar_id: string;

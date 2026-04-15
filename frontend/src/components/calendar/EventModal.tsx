@@ -3,6 +3,7 @@ import { format, parseISO } from "date-fns";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { events as eventsApi } from "@/api/endpoints";
 import type { CalendarEvent, EventFormData } from "./types";
+import { RECURRENCE_OPTIONS, recurrenceLabel } from "./types";
 
 interface EventModalProps {
   event: CalendarEvent | null;
@@ -22,6 +23,7 @@ const EMPTY_FORM: EventFormData = {
   description: "",
   profile_id: "",
   all_day: false,
+  recurrence_rule: "",
 };
 
 export default function EventModal({ event, onClose, profiles = [] }: EventModalProps) {
@@ -39,6 +41,7 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
         description: event.description ?? "",
         profile_id: event.profile_id,
         all_day: event.all_day ?? false,
+        recurrence_rule: event.recurrence_rule ?? "",
       });
       setEditing(false);
     }
@@ -54,6 +57,7 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
         description: data.description,
         profile_id: data.profile_id || undefined,
         all_day: data.all_day,
+        recurrence_rule: data.recurrence_rule || null,
       });
     },
     onSuccess: () => {
@@ -199,6 +203,23 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
                   </select>
                 </label>
               )}
+
+              <label className="block">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  Repeat
+                </span>
+                <select
+                  value={form.recurrence_rule}
+                  onChange={(e) => handleChange("recurrence_rule", e.target.value)}
+                  className="mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-3 py-3 text-base min-h-[44px]"
+                >
+                  {RECURRENCE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </>
           ) : (
             /* ── View mode ── */
@@ -224,6 +245,12 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
                   <p>
                     <span className="font-medium">Where: </span>
                     {event.location}
+                  </p>
+                )}
+                {event.recurrence_rule && (
+                  <p>
+                    <span className="font-medium">🔁 </span>
+                    {recurrenceLabel(event.recurrence_rule)}
                   </p>
                 )}
                 {event.description && (

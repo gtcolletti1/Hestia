@@ -105,7 +105,10 @@ export default function DayView({ date }: DayViewProps) {
                 backgroundColor: ev.profile_color || "#3b82f6",
               }}
             >
-              <p className="font-medium truncate">{ev.title}</p>
+              <p className="font-medium truncate">
+                {ev.recurrence_rule && <span title="Recurring">🔁 </span>}
+                {ev.title}
+              </p>
               <p className="text-xs opacity-90">
                 {format(parseISO(ev.start), "h:mm a")}
               </p>

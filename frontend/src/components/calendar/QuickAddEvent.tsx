@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { events as eventsApi, calendars } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { RECURRENCE_OPTIONS } from "./types";
 
 interface QuickAddEventProps {
   onClose: () => void;
@@ -23,6 +24,7 @@ export default function QuickAddEvent({
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("10:00");
   const [profileId, setProfileId] = useState(profiles[0]?.id ?? "");
+  const [recurrence, setRecurrence] = useState("");
 
   const { data: calendarList = [], isLoading: calendarsLoading } = useQuery({
     queryKey: ["calendars", householdId],
@@ -44,6 +46,7 @@ export default function QuickAddEvent({
         profile_id: profileId || undefined,
         source_calendar_id: sourceCalendarId!,
         all_day: false,
+        recurrence_rule: recurrence || undefined,
       });
     },
     onSuccess: () => {
@@ -133,6 +136,18 @@ export default function QuickAddEvent({
             ))}
           </select>
         )}
+
+        <select
+          value={recurrence}
+          onChange={(e) => setRecurrence(e.target.value)}
+          className="block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-4 py-3 text-base min-h-[44px]"
+        >
+          {RECURRENCE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
 
         <div className="flex gap-3 pt-2">
           <button

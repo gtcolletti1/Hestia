@@ -12,6 +12,7 @@ export interface CalendarEvent {
   profile_color: string;
   calendar_source?: string;
   all_day?: boolean;
+  recurrence_rule?: string;
 }
 
 export interface EventFormData {
@@ -22,9 +23,30 @@ export interface EventFormData {
   description: string;
   profile_id: string;
   all_day: boolean;
+  recurrence_rule: string;
 }
 
 export type CalendarViewMode = "day" | "week" | "month" | "agenda";
+
+export const RECURRENCE_OPTIONS = [
+  { value: "", label: "Does not repeat" },
+  { value: "FREQ=DAILY", label: "Daily" },
+  { value: "FREQ=WEEKLY", label: "Weekly" },
+  { value: "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", label: "Weekdays" },
+  { value: "FREQ=MONTHLY", label: "Monthly" },
+  { value: "FREQ=YEARLY", label: "Yearly" },
+] as const;
+
+export function recurrenceLabel(rule?: string): string {
+  if (!rule) return "";
+  const match = RECURRENCE_OPTIONS.find((o) => o.value === rule);
+  if (match) return match.label;
+  if (rule.includes("DAILY")) return "Daily";
+  if (rule.includes("WEEKLY")) return "Weekly";
+  if (rule.includes("MONTHLY")) return "Monthly";
+  if (rule.includes("YEARLY")) return "Yearly";
+  return "Repeats";
+}
 
 export function mapEventToCalendarEvent(
   ev: Event,
@@ -43,5 +65,6 @@ export function mapEventToCalendarEvent(
     profile_color: profile?.color ?? ev.color ?? "",
     calendar_source: ev.source_calendar_id,
     all_day: ev.all_day,
+    recurrence_rule: ev.recurrence_rule,
   };
 }

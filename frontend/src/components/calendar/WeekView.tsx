@@ -139,7 +139,7 @@ export default function WeekView({ date }: WeekViewProps) {
                       backgroundColor: ev.profile_color || "#3b82f6",
                     }}
                   >
-                    {ev.title}
+                    {ev.recurrence_rule ? `🔁 ${ev.title}` : ev.title}
                   </button>
                 ))}
             </div>

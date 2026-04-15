@@ -103,7 +103,10 @@ export default function AgendaView({ date }: AgendaViewProps) {
                       style={{ backgroundColor: ev.profile_color || "#3b82f6" }}
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{ev.title}</p>
+                      <p className="font-medium truncate">
+                        {ev.recurrence_rule && <span title="Recurring">🔁 </span>}
+                        {ev.title}
+                      </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         {format(parseISO(ev.start), "h:mm a")}
                         {" – "}
