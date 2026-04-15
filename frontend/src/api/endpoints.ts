@@ -262,3 +262,12 @@ export const integrations = {
       params: { household_id: householdId },
     }),
 };
+
+// --- Weather ---
+
+export const weather = {
+  get: (householdId: string) =>
+    client.get("/weather", {
+      params: { household_id: householdId },
+    }),
+};

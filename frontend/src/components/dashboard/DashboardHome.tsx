@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { dashboard } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import WeatherWidget from "./WeatherWidget";
 import type { DashboardData, AgendaBucket, MealPlan, Routine } from "@/types";
 
 // ── Helpers ──
@@ -247,6 +248,7 @@ export default function DashboardHome() {
             </>
           ) : (
             <>
+              <WeatherWidget />
               <RoutinesWidget routines={data?.active_routines ?? []} />
               <MealsWidget meals={data?.today_meals ?? []} />
               <ListsWidget lists={data?.active_lists ?? []} />

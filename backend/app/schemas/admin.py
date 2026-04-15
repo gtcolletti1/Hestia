@@ -9,6 +9,7 @@ class ModulesEnabled(BaseModel):
     routines: bool = True
     lists: bool = True
     meals: bool = True
+    weather: bool = True
 
 
 class HouseholdSettings(BaseModel):
@@ -17,6 +18,9 @@ class HouseholdSettings(BaseModel):
     accent_color: str = "#4F46E5"
     modules_enabled: ModulesEnabled = ModulesEnabled()
     privacy_mode: bool = False
+    weather_lat: float | None = None
+    weather_lon: float | None = None
+    weather_units: str = "imperial"  # "imperial" | "metric"
 
 
 class HouseholdSettingsUpdate(BaseModel):
@@ -25,6 +29,9 @@ class HouseholdSettingsUpdate(BaseModel):
     accent_color: str | None = None
     modules_enabled: ModulesEnabled | None = None
     privacy_mode: bool | None = None
+    weather_lat: float | None = None
+    weather_lon: float | None = None
+    weather_units: str | None = None
 
 
 class ModuleToggle(BaseModel):

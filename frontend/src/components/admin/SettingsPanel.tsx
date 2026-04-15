@@ -16,8 +16,12 @@ interface HouseholdSettings {
     routines: boolean;
     lists: boolean;
     meals: boolean;
+    weather: boolean;
   };
   privacy_mode: boolean;
+  weather_lat: number | null;
+  weather_lon: number | null;
+  weather_units: string;
 }
 
 interface IntegrationStatus {
@@ -34,8 +38,12 @@ const DEFAULT_SETTINGS: HouseholdSettings = {
     routines: true,
     lists: true,
     meals: true,
+    weather: true,
   },
   privacy_mode: false,
+  weather_lat: null,
+  weather_lon: null,
+  weather_units: "imperial",
 };
 
 const ACCENT_COLORS = [
@@ -321,6 +329,79 @@ export default function SettingsPanel() {
       </section>
 
       {/* Integrations */}
+      <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+          🌤️ Weather
+        </h3>
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Enter your location coordinates for weather on the dashboard.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Latitude
+              </label>
+              <input
+                type="number"
+                step="any"
+                placeholder="e.g. 40.7128"
+                value={form.weather_lat ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    weather_lat: e.target.value ? parseFloat(e.target.value) : null,
+                  }))
+                }
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-3 text-base text-gray-900 dark:text-gray-100 min-h-[44px]"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Longitude
+              </label>
+              <input
+                type="number"
+                step="any"
+                placeholder="e.g. -74.0060"
+                value={form.weather_lon ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    weather_lon: e.target.value ? parseFloat(e.target.value) : null,
+                  }))
+                }
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-3 text-base text-gray-900 dark:text-gray-100 min-h-[44px]"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Temperature Units
+            </label>
+            <div className="flex gap-2">
+              {(["imperial", "metric"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() =>
+                    setForm((prev) => ({ ...prev, weather_units: u }))
+                  }
+                  className={`rounded-lg px-4 py-2 text-sm font-medium min-h-[44px] transition-colors ${
+                    form.weather_units === u
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                  }`}
+                >
+                  {u === "imperial" ? "°F (Imperial)" : "°C (Metric)"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Calendar & Outlook Integrations */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
           🔗 Integrations
