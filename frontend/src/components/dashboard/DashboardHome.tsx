@@ -3,6 +3,7 @@ import { format, parseISO } from "date-fns";
 import { dashboard } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import WeatherWidget from "./WeatherWidget";
+import MessagesWidget from "./MessagesWidget";
 import type { DashboardData, AgendaBucket, MealPlan, Routine } from "@/types";
 
 // ── Helpers ──
@@ -252,6 +253,7 @@ export default function DashboardHome() {
               <RoutinesWidget routines={data?.active_routines ?? []} />
               <MealsWidget meals={data?.today_meals ?? []} />
               <ListsWidget lists={data?.active_lists ?? []} />
+              <MessagesWidget />
             </>
           )}
         </aside>

@@ -11,6 +11,7 @@ class ModulesEnabled(BaseModel):
     meals: bool = True
     weather: bool = True
     screensaver: bool = True
+    messages: bool = True
 
 
 class HouseholdSettings(BaseModel):

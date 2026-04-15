@@ -288,3 +288,20 @@ export const photos = {
 
   delete: (photoId: string) => client.delete(`/photos/${photoId}`),
 };
+
+// --- Notes (Message Board) ---
+
+export const notes = {
+  getAll: (householdId: string) =>
+    client.get("/notes", {
+      params: { household_id: householdId },
+    }),
+
+  create: (data: { title: string; body?: string; color?: string; pinned?: boolean; household_id: string }) =>
+    client.post("/notes", data),
+
+  update: (noteId: string, data: { title?: string; body?: string; color?: string; pinned?: boolean; sort_order?: number }) =>
+    client.put(`/notes/${noteId}`, data),
+
+  delete: (noteId: string) => client.delete(`/notes/${noteId}`),
+};

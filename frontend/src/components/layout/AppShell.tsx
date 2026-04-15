@@ -9,6 +9,7 @@ const navItems = [
   { to: "/routines", icon: "✅", label: "Routines" },
   { to: "/lists", icon: "📋", label: "Lists" },
   { to: "/meals", icon: "🍽️", label: "Meals" },
+  { to: "/messages", icon: "💬", label: "Messages" },
 ] as const;
 
 const HIDDEN_NAV_PREFIXES = ["/admin", "/profiles"];
