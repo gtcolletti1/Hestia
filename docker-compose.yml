@@ -86,7 +86,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     expose:
-      - "3000"
+      - "80"
     networks:
       - familyhub
 
