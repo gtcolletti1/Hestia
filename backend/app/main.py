@@ -63,6 +63,7 @@ from app.api import admin, auth, dashboard, meals, weather  # noqa: E402
 from app.api import photos  # noqa: E402
 from app.api import notes  # noqa: E402
 from app.api import notifications  # noqa: E402
+from app.api import rewards  # noqa: E402
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(meals.router, prefix="/api")
@@ -72,3 +73,4 @@ app.include_router(weather.router, prefix="/api")
 app.include_router(photos.router, prefix="/api")
 app.include_router(notes.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(rewards.router, prefix="/api")

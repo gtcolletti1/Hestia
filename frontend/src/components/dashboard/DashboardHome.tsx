@@ -4,6 +4,7 @@ import { dashboard } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import WeatherWidget from "./WeatherWidget";
 import MessagesWidget from "./MessagesWidget";
+import LeaderboardWidget from "./LeaderboardWidget";
 import type { DashboardData, AgendaBucket, MealPlan, Routine } from "@/types";
 
 // ── Helpers ──
@@ -254,6 +255,7 @@ export default function DashboardHome() {
               <MealsWidget meals={data?.today_meals ?? []} />
               <ListsWidget lists={data?.active_lists ?? []} />
               <MessagesWidget />
+              <LeaderboardWidget />
             </>
           )}
         </aside>

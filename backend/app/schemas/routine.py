@@ -13,6 +13,7 @@ class RoutineStepBase(BaseModel):
     label: str
     icon: str | None = None
     sort_order: int
+    points_value: int = 0
 
 
 class RoutineStepCreate(RoutineStepBase):

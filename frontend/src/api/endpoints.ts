@@ -326,3 +326,33 @@ export const notifications = {
       params: { household_id: householdId },
     }),
 };
+
+// --- Rewards ---
+
+export const rewards = {
+  getAll: (householdId: string) =>
+    client.get("/rewards", {
+      params: { household_id: householdId },
+    }),
+
+  create: (data: { title: string; description?: string; points_cost: number; icon?: string; household_id: string }) =>
+    client.post("/rewards", data),
+
+  update: (rewardId: string, data: { title?: string; description?: string; points_cost?: number; icon?: string; is_active?: boolean }) =>
+    client.put(`/rewards/${rewardId}`, data),
+
+  delete: (rewardId: string) => client.delete(`/rewards/${rewardId}`),
+
+  getPoints: (profileId: string, householdId: string) =>
+    client.get("/rewards/points", {
+      params: { profile_id: profileId, household_id: householdId },
+    }),
+
+  getLeaderboard: (householdId: string) =>
+    client.get("/rewards/leaderboard", {
+      params: { household_id: householdId },
+    }),
+
+  redeem: (data: { reward_id: string; profile_id: string; household_id: string }) =>
+    client.post("/rewards/redeem", data),
+};

@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.api.auth import get_current_profile
 from app.database import get_db
 from app.models.routine import Routine, RoutineCompletion, RoutineStep, TimeBlock
+from app.models.reward import PointLedger
 from app.models.user import Profile
 from app.schemas.routine import (
     RoutineCompletionResponse,
@@ -295,6 +296,18 @@ async def complete_step(
     step_id_str = str(step_id)
     if step_id_str not in completion.completed_steps:
         completion.completed_steps = [*completion.completed_steps, step_id_str]
+
+        # Award points if the step has a point value
+        completed_step = next((s for s in routine.steps if str(s.id) == step_id_str), None)
+        if completed_step and completed_step.points_value > 0:
+            ledger_entry = PointLedger(
+                household_id=routine.household_id,
+                profile_id=profile_id,
+                points=completed_step.points_value,
+                reason=f"Completed: {completed_step.label}",
+                routine_step_id=step_id,
+            )
+            db.add(ledger_entry)
 
     # Check if all steps are done
     if set(completion.completed_steps) >= step_ids:

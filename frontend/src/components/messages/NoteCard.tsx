@@ -63,8 +63,8 @@ export default function NoteCard({ note, onEdit, onDelete, onTogglePin }: NoteCa
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mt-auto pt-1">
         <span className="flex items-center gap-1">
-          {author?.avatar_emoji && <span>{author.avatar_emoji}</span>}
-          {author?.display_name ?? "Unknown"}
+          {author?.avatar_url && <img src={author.avatar_url} alt="" className="w-4 h-4 rounded-full" />}
+          {author?.name ?? "Unknown"}
         </span>
         <span>{timeAgo}</span>
       </div>

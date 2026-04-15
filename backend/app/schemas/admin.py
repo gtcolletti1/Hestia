@@ -13,6 +13,7 @@ class ModulesEnabled(BaseModel):
     screensaver: bool = True
     messages: bool = True
     notifications: bool = True
+    rewards: bool = True
 
 
 class HouseholdSettings(BaseModel):

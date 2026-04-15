@@ -63,7 +63,7 @@ export default function MessagesWidget() {
                 </p>
               )}
               <p className="text-xs text-gray-400 mt-1">
-                {author?.avatar_emoji} {author?.display_name ?? "Unknown"}
+                {author?.name ?? "Unknown"}
               </p>
             </div>
           );

@@ -78,6 +78,7 @@ class RoutineStep(Base):
     icon: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True, comment="Emoji or icon name"
     )
+    points_value: Mapped[int] = mapped_column(default=0, nullable=False, comment="Points awarded on completion")
     sort_order: Mapped[int] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         default=func.now(), server_default=func.now()
