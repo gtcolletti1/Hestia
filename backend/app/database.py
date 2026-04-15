@@ -28,6 +28,13 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Create all tables (useful for development/testing)."""
+    """Create all tables and apply lightweight migrations."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Lightweight column migrations (safe to re-run)
+        await conn.execute(
+            __import__("sqlalchemy").text(
+                "ALTER TABLE routine_steps ADD COLUMN IF NOT EXISTS points_value INTEGER NOT NULL DEFAULT 0"
+            )
+        )

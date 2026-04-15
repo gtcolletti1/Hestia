@@ -150,6 +150,7 @@ async def create_routine(
             label=step_data.label,
             icon=step_data.icon,
             sort_order=step_data.sort_order,
+            points_value=step_data.points_value,
         )
         db.add(step)
 
@@ -205,6 +206,7 @@ async def update_routine(
                 label=step_data["label"],
                 icon=step_data.get("icon"),
                 sort_order=step_data["sort_order"],
+                points_value=step_data.get("points_value", 0),
             )
             db.add(step)
 

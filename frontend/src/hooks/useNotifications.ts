@@ -16,7 +16,7 @@ const POLL_INTERVAL_MS = 30_000; // 30 seconds
 export function useNotifications() {
   const householdId = useHouseholdStore((s) => s.householdId);
   const [toasts, setToasts] = useState<NotificationItem[]>([]);
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval>>(undefined);
 
   const dismissToast = useCallback((reminderId: string) => {
     setToasts((prev) => prev.filter((t) => t.reminder_id !== reminderId));

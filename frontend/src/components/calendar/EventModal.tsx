@@ -60,7 +60,7 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
         description: data.description,
         profile_id: data.profile_id || undefined,
         all_day: data.all_day,
-        recurrence_rule: data.recurrence_rule || null,
+        recurrence_rule: data.recurrence_rule || undefined,
       });
     },
     onSuccess: () => {
