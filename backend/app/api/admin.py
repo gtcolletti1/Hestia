@@ -101,7 +101,7 @@ async def toggle_module(
     """Enable or disable a single module."""
     if current_profile.household_id != household_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    valid_modules = {"calendar", "routines", "lists", "meals", "weather"}
+    valid_modules = {"calendar", "routines", "lists", "meals", "weather", "screensaver"}
     if payload.module not in valid_modules:
         raise HTTPException(
             status_code=422,

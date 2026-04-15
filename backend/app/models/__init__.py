@@ -4,6 +4,7 @@ from app.models.routine import Routine, RoutineStep, RoutineCompletion  # noqa: 
 from app.models.list import TaskList, ListItem  # noqa: F401
 from app.models.meal import MealPlan  # noqa: F401
 from app.models.integration import OAuthCredential, SyncQueueItem  # noqa: F401
+from app.models.photo import Photo  # noqa: F401
 
 __all__ = [
     "Household",
@@ -18,4 +19,5 @@ __all__ = [
     "MealPlan",
     "OAuthCredential",
     "SyncQueueItem",
+    "Photo",
 ]

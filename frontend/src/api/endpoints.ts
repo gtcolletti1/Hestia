@@ -271,3 +271,20 @@ export const weather = {
       params: { household_id: householdId },
     }),
 };
+
+// --- Photos ---
+
+export const photos = {
+  getAll: (householdId: string) =>
+    client.get("/photos", {
+      params: { household_id: householdId },
+    }),
+
+  create: (data: { url: string; caption?: string; sort_order?: number; household_id: string }) =>
+    client.post("/photos", data),
+
+  update: (photoId: string, data: { caption?: string; sort_order?: number }) =>
+    client.put(`/photos/${photoId}`, data),
+
+  delete: (photoId: string) => client.delete(`/photos/${photoId}`),
+};

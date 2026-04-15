@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { admin, integrations as integrationsApi } from "@/api/endpoints";
+import { admin, integrations as integrationsApi, photos as photosApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useThemeStore } from "@/stores/themeStore";
 
@@ -401,6 +401,9 @@ export default function SettingsPanel() {
         </div>
       </section>
 
+      {/* Screensaver Photos */}
+      <ScreensaverPhotosSection householdId={householdId} />
+
       {/* Calendar & Outlook Integrations */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -523,5 +526,115 @@ export default function SettingsPanel() {
         )}
       </div>
     </div>
+  );
+}
+
+/* ------------ Screensaver Photos sub-component ------------ */
+
+function ScreensaverPhotosSection({ householdId }: { householdId: string | null }) {
+  const queryClient = useQueryClient();
+  const [newUrl, setNewUrl] = useState("");
+  const [newCaption, setNewCaption] = useState("");
+
+  const { data: photoList = [] } = useQuery<{ id: string; url: string; caption: string | null; sort_order: number }[]>({
+    queryKey: ["photos", householdId],
+    queryFn: () => photosApi.getAll(householdId!).then((r) => r.data),
+    enabled: !!householdId,
+  });
+
+  const addMutation = useMutation({
+    mutationFn: (data: { url: string; caption?: string; household_id: string }) =>
+      photosApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["photos"] });
+      setNewUrl("");
+      setNewCaption("");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => photosApi.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["photos"] }),
+  });
+
+  const handleAdd = () => {
+    if (!newUrl.trim() || !householdId) return;
+    addMutation.mutate({
+      url: newUrl.trim(),
+      caption: newCaption.trim() || undefined,
+      household_id: householdId,
+    });
+  };
+
+  return (
+    <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        🖼️ Screensaver Photos
+      </h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Add photo URLs to display in the screensaver slideshow when the display is idle.
+      </p>
+
+      {/* Add photo form */}
+      <div className="flex flex-col gap-2 mb-4">
+        <input
+          type="url"
+          placeholder="Photo URL (https://...)"
+          value={newUrl}
+          onChange={(e) => setNewUrl(e.target.value)}
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Caption (optional)"
+            value={newCaption}
+            onChange={(e) => setNewCaption(e.target.value)}
+            className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+          />
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={!newUrl.trim() || addMutation.isPending}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 min-h-[36px]"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+
+      {/* Photo list */}
+      {photoList.length === 0 ? (
+        <p className="text-sm text-gray-400 italic">No photos yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {photoList.map((photo) => (
+            <li
+              key={photo.id}
+              className="flex items-center gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-2"
+            >
+              <img
+                src={photo.url}
+                alt={photo.caption ?? "Photo"}
+                className="h-12 w-12 rounded object-cover flex-shrink-0"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                  {photo.caption || photo.url}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(photo.id)}
+                className="text-red-500 hover:text-red-700 text-sm p-1"
+                aria-label="Remove photo"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

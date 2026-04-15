@@ -10,6 +10,7 @@ class ModulesEnabled(BaseModel):
     lists: bool = True
     meals: bool = True
     weather: bool = True
+    screensaver: bool = True
 
 
 class HouseholdSettings(BaseModel):
