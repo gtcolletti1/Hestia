@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { format, parseISO } from "date-fns";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { events as eventsApi } from "@/api/endpoints";
+import { events as eventsApi, reminders as remindersApi } from "@/api/endpoints";
+import { useHouseholdStore } from "@/stores/householdStore";
 import type { CalendarEvent, EventFormData } from "./types";
 import { RECURRENCE_OPTIONS, recurrenceLabel } from "./types";
 
@@ -28,8 +29,10 @@ const EMPTY_FORM: EventFormData = {
 
 export default function EventModal({ event, onClose, profiles = [] }: EventModalProps) {
   const queryClient = useQueryClient();
+  const householdId = useHouseholdStore((s) => s.householdId);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<EventFormData>(EMPTY_FORM);
+  const [reminderMinutes, setReminderMinutes] = useState<string>("");
 
   useEffect(() => {
     if (event) {
@@ -85,9 +88,22 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
     [],
   );
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.title.trim()) return;
     updateMutation.mutate(form);
+
+    // Create reminder if selected
+    if (reminderMinutes && event && householdId) {
+      try {
+        await remindersApi.create({
+          event_id: event.id,
+          minutes_before: parseInt(reminderMinutes, 10),
+          household_id: householdId,
+        });
+      } catch {
+        // silently ignore reminder creation errors
+      }
+    }
   };
 
   if (!event) return null;
@@ -218,6 +234,24 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
                       {opt.label}
                     </option>
                   ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                  🔔 Reminder
+                </span>
+                <select
+                  value={reminderMinutes}
+                  onChange={(e) => setReminderMinutes(e.target.value)}
+                  className="mt-1 block w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-transparent px-3 py-3 text-base min-h-[44px]"
+                >
+                  <option value="">No reminder</option>
+                  <option value="5">5 minutes before</option>
+                  <option value="15">15 minutes before</option>
+                  <option value="30">30 minutes before</option>
+                  <option value="60">1 hour before</option>
+                  <option value="1440">1 day before</option>
                 </select>
               </label>
             </>

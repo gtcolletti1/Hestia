@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
 import Clock from "@/components/shared/Clock";
+import NotificationToast from "@/components/shared/NotificationToast";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const navItems = [
   { to: "/", icon: "🏠", label: "Home" },
@@ -24,6 +26,11 @@ export default function AppShell() {
   const profiles = useHouseholdStore((s) => s.profiles);
   const fetchProfiles = useHouseholdStore((s) => s.fetchProfiles);
   const fetchHousehold = useHouseholdStore((s) => s.fetchHousehold);
+  const { toasts, dismissToast, requestPermission } = useNotifications();
+
+  useEffect(() => {
+    requestPermission();
+  }, [requestPermission]);
 
   useEffect(() => {
     if (profiles.length === 0) {
@@ -36,6 +43,7 @@ export default function AppShell() {
 
   return (
     <div className="flex h-screen flex-col bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+      <NotificationToast toasts={toasts} onDismiss={dismissToast} />
       {/* Top bar */}
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-700 dark:bg-gray-800">
         <div className="flex items-center gap-4">

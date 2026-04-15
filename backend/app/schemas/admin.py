@@ -12,6 +12,7 @@ class ModulesEnabled(BaseModel):
     weather: bool = True
     screensaver: bool = True
     messages: bool = True
+    notifications: bool = True
 
 
 class HouseholdSettings(BaseModel):

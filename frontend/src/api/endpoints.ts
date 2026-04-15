@@ -305,3 +305,24 @@ export const notes = {
 
   delete: (noteId: string) => client.delete(`/notes/${noteId}`),
 };
+
+// --- Reminders & Notifications ---
+
+export const reminders = {
+  create: (data: { event_id: string; minutes_before: number; household_id: string }) =>
+    client.post("/reminders", data),
+
+  getForEvent: (eventId: string, householdId: string) =>
+    client.get("/reminders", {
+      params: { event_id: eventId, household_id: householdId },
+    }),
+
+  delete: (reminderId: string) => client.delete(`/reminders/${reminderId}`),
+};
+
+export const notifications = {
+  getUpcoming: (householdId: string) =>
+    client.get("/notifications/upcoming", {
+      params: { household_id: householdId },
+    }),
+};
