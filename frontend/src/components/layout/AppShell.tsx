@@ -13,9 +13,10 @@ const navItems = [
   { to: "/meals", icon: "🍽️", label: "Meals" },
   { to: "/messages", icon: "💬", label: "Messages" },
   { to: "/rewards", icon: "🏆", label: "Rewards" },
+  { to: "/profiles", icon: "👤", label: "Profiles" },
 ] as const;
 
-const HIDDEN_NAV_PREFIXES = ["/admin", "/profiles"];
+const HIDDEN_NAV_PREFIXES = ["/admin"];
 
 export default function AppShell() {
   const { pathname } = useLocation();

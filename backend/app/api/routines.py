@@ -314,7 +314,7 @@ async def complete_step(
     # Check if all steps are done
     if set(completion.completed_steps) >= step_ids:
         completion.is_fully_completed = True
-        completion.completed_at = datetime.now(timezone.utc)
+        completion.completed_at = datetime.utcnow()
 
     await db.flush()
     await db.refresh(completion)
