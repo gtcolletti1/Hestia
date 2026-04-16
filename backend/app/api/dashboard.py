@@ -14,6 +14,7 @@ from app.models.calendar import Event, SourceCalendar
 from app.models.list import ListItem, TaskList
 from app.models.meal import MealPlan
 from app.models.routine import Routine
+from sqlalchemy.orm import selectinload
 from app.models.user import Profile
 from app.schemas.dashboard import (
     ActiveListSummary,
@@ -101,7 +102,9 @@ async def get_dashboard(
 
     # ── Active routines ──────────────────────────────────────────────────
     routines_result = await db.execute(
-        select(Routine).where(
+        select(Routine)
+        .options(selectinload(Routine.steps))
+        .where(
             Routine.household_id == household_id,
             Routine.is_active.is_(True),
         )
@@ -118,6 +121,7 @@ async def get_dashboard(
                 "name": routine.name,
                 "time_block": routine.time_block.value,
                 "profile_id": str(routine.profile_id) if routine.profile_id else None,
+                "step_count": len(routine.steps),
             }
         )
 

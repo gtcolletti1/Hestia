@@ -115,19 +115,22 @@ function RoutinesWidget({ routines }: { routines: Routine[] }) {
         <p className="text-sm text-gray-400 italic">No routines set up yet</p>
       ) : (
         <ul className="space-y-2">
-          {routines.map((r) => (
-            <li key={r.id} className="flex items-center gap-3 min-h-[44px]">
-              <span className="text-xs font-semibold uppercase text-gray-400 w-16 shrink-0">
-                {r.time_block}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{r.name}</p>
-                <p className="text-xs text-gray-400">
-                  {r.steps.length} step{r.steps.length !== 1 ? "s" : ""}
-                </p>
-              </div>
-            </li>
-          ))}
+          {routines.map((r) => {
+            const count = (r as Routine & { step_count?: number }).step_count ?? r.steps?.length ?? 0;
+            return (
+              <li key={r.id} className="flex items-center gap-3 min-h-[44px]">
+                <span className="text-xs font-semibold uppercase text-gray-400 w-16 shrink-0">
+                  {r.time_block}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{r.name}</p>
+                  <p className="text-xs text-gray-400">
+                    {count} step{count !== 1 ? "s" : ""}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
