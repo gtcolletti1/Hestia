@@ -85,11 +85,19 @@ export interface MealPlan {
   assigned_profile_id?: string;
 }
 
+export interface DashboardRoutine {
+  id: string;
+  name: string;
+  time_block: "morning" | "afternoon" | "evening" | "bedtime";
+  profile_id?: string | null;
+  step_count: number;
+}
+
 export interface DashboardData {
   date: string;
   profiles: Profile[];
   agenda: AgendaBucket[];
-  active_routines: Routine[];
+  active_routines: DashboardRoutine[];
   today_meals: MealPlan[];
   active_lists: {
     name: string;

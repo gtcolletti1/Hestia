@@ -5,7 +5,7 @@ import { useHouseholdStore } from "@/stores/householdStore";
 import WeatherWidget from "./WeatherWidget";
 import MessagesWidget from "./MessagesWidget";
 import LeaderboardWidget from "./LeaderboardWidget";
-import type { DashboardData, AgendaBucket, MealPlan, Routine } from "@/types";
+import type { DashboardData, AgendaBucket, MealPlan, DashboardRoutine } from "@/types";
 
 // ── Helpers ──
 
@@ -105,7 +105,7 @@ function AgendaSection({ buckets }: { buckets: AgendaBucket[] }) {
   );
 }
 
-function RoutinesWidget({ routines }: { routines: Routine[] }) {
+function RoutinesWidget({ routines }: { routines: DashboardRoutine[] }) {
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
       <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -115,22 +115,19 @@ function RoutinesWidget({ routines }: { routines: Routine[] }) {
         <p className="text-sm text-gray-400 italic">No routines set up yet</p>
       ) : (
         <ul className="space-y-2">
-          {routines.map((r) => {
-            const count = (r as Routine & { step_count?: number }).step_count ?? r.steps?.length ?? 0;
-            return (
-              <li key={r.id} className="flex items-center gap-3 min-h-[44px]">
-                <span className="text-xs font-semibold uppercase text-gray-400 w-16 shrink-0">
-                  {r.time_block}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{r.name}</p>
-                  <p className="text-xs text-gray-400">
-                    {count} step{count !== 1 ? "s" : ""}
-                  </p>
-                </div>
-              </li>
-            );
-          })}
+          {routines.map((r) => (
+            <li key={r.id} className="flex items-center gap-3 min-h-[44px]">
+              <span className="text-xs font-semibold uppercase text-gray-400 w-16 shrink-0">
+                {r.time_block}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium truncate">{r.name}</p>
+                <p className="text-xs text-gray-400">
+                  {r.step_count} step{r.step_count !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </li>
+          ))}
         </ul>
       )}
     </div>
