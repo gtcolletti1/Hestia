@@ -1,7 +1,7 @@
 import uuid
 import datetime as dt
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.routine import TimeBlock
 
@@ -40,7 +40,7 @@ class RoutineBase(BaseModel):
 class RoutineCreate(RoutineBase):
     household_id: uuid.UUID
     profile_id: uuid.UUID | None = None
-    steps: list[RoutineStepCreate] = []
+    steps: list[RoutineStepCreate] = Field(min_length=1)
 
 
 class RoutineUpdate(BaseModel):

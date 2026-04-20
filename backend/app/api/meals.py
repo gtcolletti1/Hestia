@@ -114,6 +114,21 @@ async def create_meal(
     """Create a new meal plan."""
     if current_profile.household_id != payload.household_id:
         raise HTTPException(status_code=403, detail="Access denied")
+
+    # Enforce one meal per (household, date, meal_type)
+    existing = await db.execute(
+        select(MealPlan).where(
+            MealPlan.household_id == payload.household_id,
+            MealPlan.date == payload.date,
+            MealPlan.meal_type == payload.meal_type,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=409,
+            detail=f"A {payload.meal_type.value} meal already exists for {payload.date}. Edit or delete it first.",
+        )
+
     meal = MealPlan(**payload.model_dump())
     db.add(meal)
     await db.flush()
