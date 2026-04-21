@@ -210,6 +210,17 @@ export default function DashboardHome() {
     refetchInterval: 60_000,
   });
 
+  const showAgenda = modulesEnabled.calendar;
+  const showSidebar =
+    modulesEnabled.weather ||
+    modulesEnabled.routines ||
+    modulesEnabled.meals ||
+    modulesEnabled.lists ||
+    modulesEnabled.messages ||
+    modulesEnabled.rewards;
+
+  const hasAnyModule = showAgenda || showSidebar;
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -226,42 +237,78 @@ export default function DashboardHome() {
         </div>
       )}
 
-      {/* Grid: Agenda 2/3 | Sidebar 1/3 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Agenda */}
-        <div className="lg:col-span-2">
-          {isLoading ? (
-            <div className="space-y-4">
-              <SkeletonLine className="h-6 w-40" />
-              {Array.from({ length: 4 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
+      {!isLoading && !hasAnyModule && (
+        <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-8 text-center">
+          <p className="text-lg text-gray-400 dark:text-gray-500">
+            All modules are turned off.
+          </p>
+          <p className="mt-1 text-sm text-gray-400 dark:text-gray-500">
+            Go to ⚙️ Settings to enable modules like Calendar, Weather, Routines, and more.
+          </p>
+        </div>
+      )}
+
+      {/* Adaptive grid: 2/3+1/3 when both, full-width when only one */}
+      {(isLoading || hasAnyModule) && (
+        <div
+          className={`grid gap-6 ${
+            showAgenda && showSidebar
+              ? "grid-cols-1 lg:grid-cols-3"
+              : "grid-cols-1"
+          }`}
+        >
+          {/* Agenda — takes 2 cols when sidebar present, full width otherwise */}
+          {(isLoading || showAgenda) && (
+            <div className={showAgenda && showSidebar ? "lg:col-span-2" : ""}>
+              {isLoading ? (
+                <div className="space-y-4">
+                  <SkeletonLine className="h-6 w-40" />
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
+                </div>
+              ) : (
+                <AgendaSection buckets={data?.agenda ?? []} />
+              )}
             </div>
-          ) : (
-            modulesEnabled.calendar && <AgendaSection buckets={data?.agenda ?? []} />
+          )}
+
+          {/* Sidebar widgets — stacked in a column when agenda is present,
+              or in a responsive grid when they have full width */}
+          {(isLoading || showSidebar) && (
+            <aside
+              className={
+                showAgenda
+                  ? "space-y-6"
+                  : "grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3"
+              }
+            >
+              {isLoading ? (
+                <>
+                  <SkeletonCard />
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </>
+              ) : (
+                <>
+                  {modulesEnabled.weather && <WeatherWidget />}
+                  {modulesEnabled.routines && (
+                    <RoutinesWidget routines={data?.active_routines ?? []} />
+                  )}
+                  {modulesEnabled.meals && (
+                    <MealsWidget meals={data?.today_meals ?? []} />
+                  )}
+                  {modulesEnabled.lists && (
+                    <ListsWidget lists={data?.active_lists ?? []} />
+                  )}
+                  {modulesEnabled.messages && <MessagesWidget />}
+                  {modulesEnabled.rewards && <LeaderboardWidget />}
+                </>
+              )}
+            </aside>
           )}
         </div>
-
-        {/* Sidebar */}
-        <aside className="space-y-6">
-          {isLoading ? (
-            <>
-              <SkeletonCard />
-              <SkeletonCard />
-              <SkeletonCard />
-            </>
-          ) : (
-            <>
-              {modulesEnabled.weather && <WeatherWidget />}
-              {modulesEnabled.routines && <RoutinesWidget routines={data?.active_routines ?? []} />}
-              {modulesEnabled.meals && <MealsWidget meals={data?.today_meals ?? []} />}
-              {modulesEnabled.lists && <ListsWidget lists={data?.active_lists ?? []} />}
-              {modulesEnabled.messages && <MessagesWidget />}
-              {modulesEnabled.rewards && <LeaderboardWidget />}
-            </>
-          )}
-        </aside>
-      </div>
+      )}
     </div>
   );
 }

@@ -51,7 +51,7 @@ export function useHouseholdSettings() {
       return res.data as HouseholdSettings;
     },
     enabled: !!householdId,
-    staleTime: 60_000,
+    staleTime: 5_000,
     refetchOnWindowFocus: true,
   });
 
