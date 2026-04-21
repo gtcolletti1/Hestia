@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { admin, integrations as integrationsApi, photos as photosApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useThemeStore } from "@/stores/themeStore";
 
 type Theme = "light" | "dark";
@@ -65,6 +66,8 @@ export default function SettingsPanel() {
   const navigate = useNavigate();
   const householdId = useHouseholdStore((s) => s.householdId);
   const setHouseholdName = useHouseholdStore((s) => s.setHouseholdName);
+  const currentProfile = useAuthStore((s) => s.profile);
+  const isAdmin = currentProfile?.role === "admin";
   const queryClient = useQueryClient();
   const { data: settings } = useQuery({
     queryKey: ["settings", householdId],
@@ -89,6 +92,7 @@ export default function SettingsPanel() {
 
   const [form, setForm] = useState<HouseholdSettings>(settings);
   const [showSaved, setShowSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     setForm(settings);
@@ -98,10 +102,20 @@ export default function SettingsPanel() {
     mutationFn: (data: HouseholdSettings) =>
       admin.updateSettings(householdId!, data as unknown as Record<string, unknown>),
     onSuccess: (_resp, submittedData) => {
+      setSaveError(null);
       queryClient.invalidateQueries({ queryKey: ["settings"] });
       setHouseholdName(submittedData.name);
       setShowSaved(true);
       setTimeout(() => setShowSaved(false), 2500);
+    },
+    onError: (err: any) => {
+      const status = err?.response?.status;
+      if (status === 403) {
+        setSaveError("Only admin profiles can change settings. Log in as an admin to make changes.");
+      } else {
+        setSaveError("Failed to save settings. Please try again.");
+      }
+      setTimeout(() => setSaveError(null), 5000);
     },
   });
 
@@ -109,6 +123,18 @@ export default function SettingsPanel() {
     mutationFn: (data: { module: string; enabled: boolean }) =>
       admin.toggleModule(householdId!, data),
     onSuccess: () => {
+      setSaveError(null);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+    onError: (err: any) => {
+      const status = err?.response?.status;
+      if (status === 403) {
+        setSaveError("Only admin profiles can toggle modules.");
+      } else {
+        setSaveError("Failed to update module. Please try again.");
+      }
+      setTimeout(() => setSaveError(null), 5000);
+      // Revert the optimistic UI update
       queryClient.invalidateQueries({ queryKey: ["settings"] });
     },
   });
@@ -125,21 +151,26 @@ export default function SettingsPanel() {
       ...prev,
       modules_enabled: { ...prev.modules_enabled, [key]: value },
     }));
-    moduleMutation.mutate({ module: key, enabled: value });
+    if (isAdmin) {
+      moduleMutation.mutate({ module: key, enabled: value });
+    } else {
+      setSaveError("Only admin profiles can toggle modules.");
+      setTimeout(() => setSaveError(null), 5000);
+    }
   };
 
   const handleThemeChange = (theme: Theme) => {
     const updated = { ...form, theme };
     setForm(updated);
     useThemeStore.getState().setTheme(theme);
-    saveMutation.mutate(updated);
+    if (isAdmin) saveMutation.mutate(updated);
   };
 
   const handleAccentColor = (color: string) => {
     const updated = { ...form, accent_color: color };
     setForm(updated);
     useThemeStore.getState().setAccentColor(color);
-    saveMutation.mutate(updated);
+    if (isAdmin) saveMutation.mutate(updated);
   };
 
   const connectGoogle = async () => {
@@ -180,6 +211,26 @@ export default function SettingsPanel() {
           Settings
         </h2>
       </div>
+
+      {/* Admin-only banner */}
+      {!isAdmin && (
+        <div className="rounded-xl bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 p-4">
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+            🔒 Admin access required to change settings.
+          </p>
+          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+            You're logged in as <strong>{currentProfile?.name ?? "unknown"}</strong> ({currentProfile?.role}).
+            Log in as an admin profile to make changes.
+          </p>
+        </div>
+      )}
+
+      {/* Error banner */}
+      {saveError && (
+        <div className="rounded-xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-4">
+          <p className="text-sm text-red-700 dark:text-red-300">{saveError}</p>
+        </div>
+      )}
 
       {/* Household */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
@@ -316,7 +367,7 @@ export default function SettingsPanel() {
             onClick={() => {
               const updated = { ...form, privacy_mode: !form.privacy_mode };
               setForm(updated);
-              saveMutation.mutate(updated);
+              if (isAdmin) saveMutation.mutate(updated);
             }}
             className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors min-h-[44px] items-center ${
               form.privacy_mode
@@ -607,10 +658,14 @@ export default function SettingsPanel() {
       <div className="sticky bottom-4">
         <button
           onClick={handleSave}
-          disabled={saveMutation.isPending}
+          disabled={saveMutation.isPending || !isAdmin}
           className="w-full rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-6 min-h-[44px] shadow-lg disabled:opacity-50 transition-colors"
         >
-          {saveMutation.isPending ? "Saving..." : "Save Settings"}
+          {!isAdmin
+            ? "🔒 Admin Required"
+            : saveMutation.isPending
+              ? "Saving..."
+              : "Save Settings"}
         </button>
         {showSaved && (
           <p className="text-center text-sm text-green-600 dark:text-green-400 mt-2">
