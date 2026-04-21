@@ -1,4 +1,4 @@
-"""API route for weather data."""
+"""API route for weather data (powered by Open-Meteo — no API key needed)."""
 
 import uuid
 
@@ -7,13 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_profile
-from app.config import get_settings
 from app.database import get_db
 from app.integrations.weather import WeatherClient
 from app.models.user import Household, Profile
 
 router = APIRouter(tags=["weather"])
-settings = get_settings()
 
 
 @router.get("/weather")
@@ -44,17 +42,9 @@ async def get_weather(
             detail="Weather location not configured. Set latitude/longitude in Settings.",
         )
 
-    api_key = settings.OPENWEATHERMAP_API_KEY
-    if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="Weather service not configured (missing API key).",
-        )
-
-    client = WeatherClient(api_key)
+    client = WeatherClient()
     try:
         data = await client.get_forecast(float(lat), float(lon))
-        # Trim forecast to 3 days
         data["forecast"] = data.get("forecast", [])[:3]
         data["units"] = units
         return data

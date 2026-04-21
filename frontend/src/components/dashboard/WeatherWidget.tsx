@@ -88,9 +88,18 @@ export default function WeatherWidget() {
     );
   }
 
-  // Don't render if weather isn't configured or errored
+  // Show a helpful message when weather isn't configured
   if (isError || !data || data.temp === null) {
-    return null;
+    return (
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
+        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+          Weather
+        </h3>
+        <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+          Set your location in Settings → Weather to see weather here.
+        </p>
+      </div>
+    );
   }
 
   const units = data.units || "imperial";
@@ -122,7 +131,7 @@ export default function WeatherWidget() {
         <span>Feels {formatTemp(data.feels_like, units)}</span>
         {data.humidity !== null && <span>💧 {data.humidity}%</span>}
         {data.wind_speed !== null && (
-          <span>💨 {units === "imperial" ? `${Math.round(data.wind_speed * 2.237)} mph` : `${Math.round(data.wind_speed)} m/s`}</span>
+          <span>💨 {units === "imperial" ? `${Math.round(data.wind_speed * 0.621)} mph` : `${Math.round(data.wind_speed)} km/h`}</span>
         )}
       </div>
 

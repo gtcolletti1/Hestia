@@ -1,6 +1,7 @@
-"""OpenWeatherMap weather integration using httpx."""
+"""Open-Meteo weather integration using httpx (no API key required)."""
 
 
+import asyncio
 import logging
 from typing import Any
 
@@ -8,18 +9,50 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-OWM_BASE = "https://api.openweathermap.org/data/2.5"
+OPEN_METEO_BASE = "https://api.open-meteo.com/v1"
 
 MAX_RETRIES = 3
 RETRY_BACKOFF_BASE = 2
 
+# Map WMO weather codes to OWM-style icon codes (day variants) and descriptions.
+_WMO_MAP: dict[int, tuple[str, str]] = {
+    0: ("01d", "clear sky"),
+    1: ("02d", "mainly clear"),
+    2: ("03d", "partly cloudy"),
+    3: ("04d", "overcast"),
+    45: ("50d", "fog"),
+    48: ("50d", "depositing rime fog"),
+    51: ("09d", "light drizzle"),
+    53: ("09d", "moderate drizzle"),
+    55: ("09d", "dense drizzle"),
+    56: ("09d", "light freezing drizzle"),
+    57: ("09d", "dense freezing drizzle"),
+    61: ("10d", "slight rain"),
+    63: ("10d", "moderate rain"),
+    65: ("10d", "heavy rain"),
+    66: ("10d", "light freezing rain"),
+    67: ("10d", "heavy freezing rain"),
+    71: ("13d", "slight snow"),
+    73: ("13d", "moderate snow"),
+    75: ("13d", "heavy snow"),
+    77: ("13d", "snow grains"),
+    80: ("09d", "slight rain showers"),
+    81: ("09d", "moderate rain showers"),
+    82: ("09d", "violent rain showers"),
+    85: ("13d", "slight snow showers"),
+    86: ("13d", "heavy snow showers"),
+    95: ("11d", "thunderstorm"),
+    96: ("11d", "thunderstorm with slight hail"),
+    99: ("11d", "thunderstorm with heavy hail"),
+}
+
 
 class WeatherClient:
-    """Client for the OpenWeatherMap API."""
+    """Client for the Open-Meteo API (free, no key required)."""
 
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
-        self._client = httpx.AsyncClient(base_url=OWM_BASE, timeout=15.0)
+    def __init__(self, api_key: str = "") -> None:
+        # api_key kept in signature for backward compatibility but is unused
+        self._client = httpx.AsyncClient(base_url=OPEN_METEO_BASE, timeout=15.0)
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -27,11 +60,6 @@ class WeatherClient:
     async def _request_with_retry(
         self, url: str, params: dict[str, Any]
     ) -> dict:
-        import asyncio
-
-        params["appid"] = self.api_key
-        params["units"] = "metric"
-
         last_exc: Exception | None = None
         for attempt in range(MAX_RETRIES):
             try:
@@ -39,7 +67,7 @@ class WeatherClient:
                 if resp.status_code == 429 or resp.status_code >= 500:
                     wait = RETRY_BACKOFF_BASE ** attempt
                     logger.warning(
-                        "OWM %s returned %s, retrying in %ss",
+                        "Open-Meteo %s returned %s, retrying in %ss",
                         url, resp.status_code, wait,
                     )
                     await asyncio.sleep(wait)
@@ -51,90 +79,68 @@ class WeatherClient:
             except httpx.HTTPError as exc:
                 last_exc = exc
                 wait = RETRY_BACKOFF_BASE ** attempt
-                logger.warning("OWM request error: %s, retrying in %ss", exc, wait)
+                logger.warning("Open-Meteo request error: %s, retrying in %ss", exc, wait)
                 await asyncio.sleep(wait)
 
-        raise last_exc or RuntimeError("OWM request failed after retries")
-
-    async def get_current(self, lat: float, lon: float) -> dict:
-        """Get current weather for a location.
-
-        Returns a simplified dict with key weather data.
-        """
-        data = await self._request_with_retry(
-            "/weather", {"lat": lat, "lon": lon}
-        )
-        return _simplify_current(data)
+        raise last_exc or RuntimeError("Open-Meteo request failed after retries")
 
     async def get_forecast(self, lat: float, lon: float) -> dict:
-        """Get a 5-day / 3-hour forecast for a location.
+        """Get current conditions + 3-day daily forecast.
 
-        Returns current conditions plus a daily summary forecast list.
+        Returns the same simplified shape the frontend expects.
         """
-        data = await self._request_with_retry(
-            "/forecast", {"lat": lat, "lon": lon}
-        )
-        return _simplify_forecast(data)
+        data = await self._request_with_retry("/forecast", {
+            "latitude": lat,
+            "longitude": lon,
+            "current": "temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m",
+            "daily": "weather_code,temperature_2m_max,temperature_2m_min",
+            "forecast_days": 4,
+            "timezone": "auto",
+        })
+        return _simplify(data)
 
 
 # ── Response simplification ──────────────────────────────────────────────────
 
 
-def _simplify_current(data: dict) -> dict:
-    """Simplify raw OWM current-weather response."""
-    main = data.get("main", {})
-    weather = data.get("weather", [{}])[0]
-    wind = data.get("wind", {})
+def _wmo_to_icon_desc(code: int | None) -> tuple[str, str]:
+    """Convert a WMO weather code to (icon, description)."""
+    if code is None:
+        return ("02d", "partly cloudy")
+    return _WMO_MAP.get(code, ("02d", "partly cloudy"))
+
+
+def _simplify(data: dict) -> dict:
+    """Convert Open-Meteo response into the shape the frontend expects.
+
+    All temps are returned in Celsius; the frontend handles unit conversion.
+    """
+    current = data.get("current", {})
+    icon, desc = _wmo_to_icon_desc(current.get("weather_code"))
+
+    daily = data.get("daily", {})
+    dates = daily.get("time", [])
+    highs = daily.get("temperature_2m_max", [])
+    lows = daily.get("temperature_2m_min", [])
+    codes = daily.get("weather_code", [])
+
+    forecast = []
+    for i, d in enumerate(dates):
+        fc_icon, fc_desc = _wmo_to_icon_desc(codes[i] if i < len(codes) else None)
+        forecast.append({
+            "date": d,
+            "high": highs[i] if i < len(highs) else 0,
+            "low": lows[i] if i < len(lows) else 0,
+            "description": fc_desc,
+            "icon": fc_icon,
+        })
 
     return {
-        "temp": main.get("temp"),
-        "feels_like": main.get("feels_like"),
-        "description": weather.get("description"),
-        "icon": weather.get("icon"),
-        "humidity": main.get("humidity"),
-        "wind_speed": wind.get("speed"),
-    }
-
-
-def _simplify_forecast(data: dict) -> dict:
-    """Simplify raw OWM 5-day forecast into daily summaries."""
-    daily: dict[str, dict] = {}
-
-    for entry in data.get("list", []):
-        dt_txt = entry.get("dt_txt", "")
-        date_str = dt_txt[:10]  # YYYY-MM-DD
-        if not date_str:
-            continue
-
-        main = entry.get("main", {})
-        weather = entry.get("weather", [{}])[0]
-        temp = main.get("temp", 0)
-
-        if date_str not in daily:
-            daily[date_str] = {
-                "date": date_str,
-                "high": temp,
-                "low": temp,
-                "description": weather.get("description"),
-                "icon": weather.get("icon"),
-            }
-        else:
-            day = daily[date_str]
-            day["high"] = max(day["high"], temp)
-            day["low"] = min(day["low"], temp)
-
-    # Also include simplified current from the first entry
-    first = data.get("list", [{}])[0] if data.get("list") else {}
-    first_main = first.get("main", {})
-    first_weather = first.get("weather", [{}])[0]
-    first_wind = first.get("wind", {})
-
-    return {
-        "temp": first_main.get("temp"),
-        "feels_like": first_main.get("feels_like"),
-        "description": first_weather.get("description"),
-        "icon": first_weather.get("icon"),
-        "humidity": first_main.get("humidity"),
-        "wind_speed": first_wind.get("speed"),
-        "forecast": sorted(daily.values(), key=lambda d: d["date"]),
+        "temp": current.get("temperature_2m"),
+        "feels_like": current.get("apparent_temperature"),
+        "description": desc,
+        "icon": icon,
+        "humidity": current.get("relative_humidity_2m"),
+        "wind_speed": current.get("wind_speed_10m"),
+        "forecast": forecast[:3],
     }

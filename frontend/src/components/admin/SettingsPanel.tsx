@@ -332,15 +332,39 @@ export default function SettingsPanel() {
         </div>
       </section>
 
-      {/* Integrations */}
+       {/* Integrations */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
           🌤️ Weather
         </h3>
         <div className="space-y-4">
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Enter your location coordinates for weather on the dashboard.
+            Enter your location coordinates for weather on the dashboard, or use the button below to auto-detect.
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (!navigator.geolocation) {
+                alert("Geolocation is not supported by this browser.");
+                return;
+              }
+              navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    weather_lat: Math.round(pos.coords.latitude * 10000) / 10000,
+                    weather_lon: Math.round(pos.coords.longitude * 10000) / 10000,
+                  }));
+                },
+                (err) => {
+                  alert(`Could not get location: ${err.message}`);
+                },
+              );
+            }}
+            className="w-full rounded-lg bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 px-4 py-3 text-sm font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors min-h-[44px]"
+          >
+            📍 Use My Location
+          </button>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">

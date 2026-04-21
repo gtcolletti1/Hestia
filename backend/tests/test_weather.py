@@ -110,16 +110,17 @@ async def test_weather_metric_units(authed_client: AsyncClient, sample_household
     assert resp.json()["weather_units"] == "metric"
 
 
-# ── Weather endpoint with location but no API key ────────────────────────────
+# ── Weather endpoint returns data when location is configured ─────────────────
 
 
 @pytest.mark.asyncio
-async def test_weather_no_api_key(
+async def test_weather_with_location_configured(
     authed_client: AsyncClient,
     sample_household: Household,
     db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    """Weather endpoint returns 503 when API key is not configured."""
+    """Weather endpoint returns data when location is set (mocked external API)."""
     hid = str(sample_household.id)
 
     # First set a location
@@ -129,7 +130,26 @@ async def test_weather_no_api_key(
         json={"weather_lat": 40.7128, "weather_lon": -74.006},
     )
 
-    # Now try to get weather (test env has no API key)
+    # Mock the WeatherClient.get_forecast to avoid real network calls
+    async def _mock_forecast(self, lat, lon):
+        return {
+            "temp": 18.5,
+            "feels_like": 17.0,
+            "description": "partly cloudy",
+            "icon": "02d",
+            "humidity": 55,
+            "wind_speed": 12.0,
+            "forecast": [
+                {"date": "2026-04-21", "high": 20.0, "low": 10.0, "description": "clear sky", "icon": "01d"},
+            ],
+        }
+
+    from app.integrations.weather import WeatherClient
+    monkeypatch.setattr(WeatherClient, "get_forecast", _mock_forecast)
+
     resp = await authed_client.get("/api/weather", params={"household_id": hid})
-    assert resp.status_code == 503
-    assert "api key" in resp.json()["detail"].lower()
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["temp"] == 18.5
+    assert data["units"] == "imperial"
+    assert len(data["forecast"]) >= 1
