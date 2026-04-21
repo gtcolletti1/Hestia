@@ -1,19 +1,20 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
 import Clock from "@/components/shared/Clock";
 import NotificationToast from "@/components/shared/NotificationToast";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 
 const navItems = [
-  { to: "/", icon: "🏠", label: "Home" },
-  { to: "/calendar", icon: "📅", label: "Calendar" },
-  { to: "/routines", icon: "✅", label: "Routines" },
-  { to: "/lists", icon: "📋", label: "Lists" },
-  { to: "/meals", icon: "🍽️", label: "Meals" },
-  { to: "/messages", icon: "💬", label: "Messages" },
-  { to: "/rewards", icon: "🏆", label: "Rewards" },
-  { to: "/profiles", icon: "👤", label: "Profiles" },
+  { to: "/", icon: "🏠", label: "Home", module: null },
+  { to: "/calendar", icon: "📅", label: "Calendar", module: "calendar" as const },
+  { to: "/routines", icon: "✅", label: "Routines", module: "routines" as const },
+  { to: "/lists", icon: "📋", label: "Lists", module: "lists" as const },
+  { to: "/meals", icon: "🍽️", label: "Meals", module: "meals" as const },
+  { to: "/messages", icon: "💬", label: "Messages", module: "messages" as const },
+  { to: "/rewards", icon: "🏆", label: "Rewards", module: "rewards" as const },
+  { to: "/profiles", icon: "👤", label: "Profiles", module: null },
 ] as const;
 
 const HIDDEN_NAV_PREFIXES = ["/admin"];
@@ -29,6 +30,16 @@ export default function AppShell() {
   const fetchProfiles = useHouseholdStore((s) => s.fetchProfiles);
   const fetchHousehold = useHouseholdStore((s) => s.fetchHousehold);
   const { toasts, dismissToast, requestPermission } = useNotifications();
+  const { modulesEnabled, privacyMode } = useHouseholdSettings();
+
+  // Filter nav items based on enabled modules
+  const visibleNavItems = useMemo(
+    () =>
+      navItems.filter(
+        (item) => item.module === null || modulesEnabled[item.module],
+      ),
+    [modulesEnabled],
+  );
 
   useEffect(() => {
     requestPermission();
@@ -44,7 +55,7 @@ export default function AppShell() {
   }, [profiles.length, householdName, fetchProfiles, fetchHousehold]);
 
   return (
-    <div className="flex h-screen flex-col bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+    <div className={`flex h-screen flex-col bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 ${privacyMode ? "privacy-mode" : ""}`}>
       <NotificationToast toasts={toasts} onDismiss={dismissToast} />
       {/* Top bar */}
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-700 dark:bg-gray-800">
@@ -92,7 +103,7 @@ export default function AppShell() {
       {!hideBottomNav && (
         <nav className="shrink-0 border-t border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
           <div className="flex items-stretch justify-around">
-            {navItems.map(({ to, icon, label }) => (
+            {visibleNavItems.map(({ to, icon, label }) => (
               <NavLink
                 key={to}
                 to={to}

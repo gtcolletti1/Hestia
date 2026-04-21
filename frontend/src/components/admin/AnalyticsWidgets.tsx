@@ -63,7 +63,7 @@ function BarChart({ routines }: { routines: RoutineCompletion[] }) {
                 className="h-full rounded transition-all"
                 style={{
                   width: `${(r.completed / maxTotal) * 100}%`,
-                  backgroundColor: "var(--accent-color, #3b82f6)",
+                  backgroundColor: "var(--color-accent, #3b82f6)",
                 }}
               />
             </div>

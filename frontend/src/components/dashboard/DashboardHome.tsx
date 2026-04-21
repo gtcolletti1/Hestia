@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { dashboard } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import WeatherWidget from "./WeatherWidget";
 import MessagesWidget from "./MessagesWidget";
 import LeaderboardWidget from "./LeaderboardWidget";
@@ -77,7 +78,7 @@ function AgendaSection({ buckets }: { buckets: AgendaBucket[] }) {
                       style={{ backgroundColor: ev.color }}
                     />
                   )}
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 privacy-blur">
                     <p className="font-medium truncate">{ev.title}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {format(parseISO(ev.start_time), "h:mm a")}
@@ -197,6 +198,7 @@ function ListsWidget({ lists }: { lists: DashboardData["active_lists"] }) {
 
 export default function DashboardHome() {
   const householdId = useHouseholdStore((s) => s.householdId);
+  const { modulesEnabled } = useHouseholdSettings();
 
   const { data, isLoading, isError } = useQuery<DashboardData>({
     queryKey: ["dashboard", householdId],
@@ -236,7 +238,7 @@ export default function DashboardHome() {
               ))}
             </div>
           ) : (
-            <AgendaSection buckets={data?.agenda ?? []} />
+            modulesEnabled.calendar && <AgendaSection buckets={data?.agenda ?? []} />
           )}
         </div>
 
@@ -250,12 +252,12 @@ export default function DashboardHome() {
             </>
           ) : (
             <>
-              <WeatherWidget />
-              <RoutinesWidget routines={data?.active_routines ?? []} />
-              <MealsWidget meals={data?.today_meals ?? []} />
-              <ListsWidget lists={data?.active_lists ?? []} />
-              <MessagesWidget />
-              <LeaderboardWidget />
+              {modulesEnabled.weather && <WeatherWidget />}
+              {modulesEnabled.routines && <RoutinesWidget routines={data?.active_routines ?? []} />}
+              {modulesEnabled.meals && <MealsWidget meals={data?.today_meals ?? []} />}
+              {modulesEnabled.lists && <ListsWidget lists={data?.active_lists ?? []} />}
+              {modulesEnabled.messages && <MessagesWidget />}
+              {modulesEnabled.rewards && <LeaderboardWidget />}
             </>
           )}
         </aside>

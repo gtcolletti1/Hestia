@@ -129,13 +129,17 @@ export default function SettingsPanel() {
   };
 
   const handleThemeChange = (theme: Theme) => {
-    setForm((prev) => ({ ...prev, theme }));
+    const updated = { ...form, theme };
+    setForm(updated);
     useThemeStore.getState().setTheme(theme);
+    saveMutation.mutate(updated);
   };
 
   const handleAccentColor = (color: string) => {
-    setForm((prev) => ({ ...prev, accent_color: color }));
+    const updated = { ...form, accent_color: color };
+    setForm(updated);
     useThemeStore.getState().setAccentColor(color);
+    saveMutation.mutate(updated);
   };
 
   const connectGoogle = async () => {
@@ -309,12 +313,11 @@ export default function SettingsPanel() {
           </div>
           <button
             type="button"
-            onClick={() =>
-              setForm((prev) => ({
-                ...prev,
-                privacy_mode: !prev.privacy_mode,
-              }))
-            }
+            onClick={() => {
+              const updated = { ...form, privacy_mode: !form.privacy_mode };
+              setForm(updated);
+              saveMutation.mutate(updated);
+            }}
             className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors min-h-[44px] items-center ${
               form.privacy_mode
                 ? "bg-blue-600"

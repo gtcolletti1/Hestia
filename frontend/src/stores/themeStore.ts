@@ -31,7 +31,9 @@ function applyTheme(theme: Theme, accentColor: string, highContrast: boolean) {
   }
 
   // Expose accent color as a CSS custom property
-  root.style.setProperty("--accent-color", accentColor);
+  root.style.setProperty("--color-accent", accentColor);
+  // Also compute a lighter variant for hover states
+  root.style.setProperty("--color-accent-light", accentColor);
 }
 
 export const useThemeStore = create<ThemeState>()(

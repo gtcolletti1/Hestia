@@ -119,7 +119,7 @@ function IntegrationCard({
             type="button"
             onClick={handleConnect}
             className="w-full rounded-lg text-white px-4 py-2 text-sm transition"
-            style={{ backgroundColor: "var(--accent-color, #3b82f6)" }}
+            style={{ backgroundColor: "var(--color-accent, #3b82f6)" }}
           >
             Connect
           </button>

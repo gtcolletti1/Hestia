@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode (Tailwind v4 defaults to media query) */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --color-accent: #3b82f6;
   --color-accent-light: #60a5fa;
@@ -27,4 +30,15 @@
 .kiosk-wrapper [contenteditable="true"] {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* Privacy mode: blur sensitive content when enabled */
+.privacy-mode .privacy-blur {
+  filter: blur(6px);
+  transition: filter 0.2s ease;
+}
+
+.privacy-mode .privacy-blur:hover,
+.privacy-mode .privacy-blur:focus-within {
+  filter: none;
 }
