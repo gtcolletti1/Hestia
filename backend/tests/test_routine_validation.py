@@ -147,3 +147,55 @@ async def test_routine_active_toggle(
     assert resp.status_code == 200
     ids = [r["id"] for r in resp.json()]
     assert routine_id not in ids
+
+
+async def test_duplicate_routine_copies_all_steps(
+    authed_client: AsyncClient,
+    sample_household: Household,
+    sample_profile: Profile,
+) -> None:
+    """Duplicating a routine creates a 'Copy of ...' with identical steps."""
+    # Create original
+    resp = await authed_client.post(
+        "/api/routines",
+        json={
+            "household_id": str(sample_household.id),
+            "name": "Bedtime",
+            "time_block": "bedtime",
+            "days_of_week": [0, 1, 2, 3, 4],
+            "steps": [
+                {"label": "Brush teeth", "icon": "🪥", "sort_order": 0, "points_value": 5},
+                {"label": "Story time", "icon": "📖", "sort_order": 1, "points_value": 0},
+                {"label": "Lights out", "icon": "💤", "sort_order": 2, "points_value": 0},
+            ],
+        },
+    )
+    assert resp.status_code == 201
+    original = resp.json()
+
+    # Duplicate
+    resp = await authed_client.post(f"/api/routines/{original['id']}/duplicate")
+    assert resp.status_code == 201
+    copy = resp.json()
+
+    assert copy["name"] == "Copy of Bedtime"
+    assert copy["id"] != original["id"]
+    assert copy["time_block"] == original["time_block"]
+    assert copy["days_of_week"] == original["days_of_week"]
+    assert copy["is_active"] == original["is_active"]
+    assert len(copy["steps"]) == 3
+    assert copy["steps"][0]["label"] == "Brush teeth"
+    assert copy["steps"][0]["points_value"] == 5
+    # Steps should have new IDs
+    orig_step_ids = {s["id"] for s in original["steps"]}
+    copy_step_ids = {s["id"] for s in copy["steps"]}
+    assert orig_step_ids.isdisjoint(copy_step_ids)
+
+
+async def test_duplicate_nonexistent_routine_404(
+    authed_client: AsyncClient,
+) -> None:
+    """Duplicating a nonexistent routine returns 404."""
+    fake_id = str(uuid.uuid4())
+    resp = await authed_client.post(f"/api/routines/{fake_id}/duplicate")
+    assert resp.status_code == 404

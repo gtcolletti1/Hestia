@@ -116,6 +116,9 @@ export const routines = {
 
   delete: (routineId: string) => client.delete(`/routines/${routineId}`),
 
+  duplicate: (routineId: string) =>
+    client.post<Routine>(`/routines/${routineId}/duplicate`),
+
   completeStep: (
     routineId: string,
     stepId: string,

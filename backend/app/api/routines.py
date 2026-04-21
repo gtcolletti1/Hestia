@@ -242,6 +242,61 @@ async def delete_routine(
     await db.flush()
 
 
+# ── Duplicate routine ────────────────────────────────────────────────────────
+
+
+@router.post("/routines/{routine_id}/duplicate", response_model=RoutineResponse, status_code=201)
+async def duplicate_routine(
+    routine_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
+) -> Routine:
+    """Clone a routine and all its steps. The copy is named 'Copy of {name}'."""
+    stmt = (
+        select(Routine)
+        .options(selectinload(Routine.steps))
+        .where(Routine.id == routine_id)
+    )
+    result = await db.execute(stmt)
+    original = result.scalar_one_or_none()
+    if original is None:
+        raise HTTPException(status_code=404, detail="Routine not found")
+    if original.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    copy = Routine(
+        household_id=original.household_id,
+        profile_id=original.profile_id,
+        name=f"Copy of {original.name}",
+        time_block=original.time_block,
+        days_of_week=list(original.days_of_week) if original.days_of_week else [],
+        start_time=original.start_time,
+        is_active=original.is_active,
+    )
+    db.add(copy)
+    await db.flush()
+
+    for step in sorted(original.steps, key=lambda s: s.sort_order):
+        db.add(RoutineStep(
+            routine_id=copy.id,
+            label=step.label,
+            icon=step.icon,
+            sort_order=step.sort_order,
+            points_value=step.points_value,
+        ))
+
+    await db.flush()
+
+    # Reload with steps
+    stmt = (
+        select(Routine)
+        .options(selectinload(Routine.steps))
+        .where(Routine.id == copy.id)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one()
+
+
 # ── Complete a step ──────────────────────────────────────────────────────────
 
 
