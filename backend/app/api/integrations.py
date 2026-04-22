@@ -7,12 +7,14 @@ from datetime import datetime, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.api.auth import get_current_profile
 from app.database import get_db
+from app.integrations.caldav_client import ICalSubscription
 from app.models.integration import OAuthCredential, OAuthProvider
 from app.models.calendar import SourceCalendar, CalendarProvider
 from app.models.user import Profile
@@ -297,3 +299,114 @@ async def integration_status(
         "providers": providers,
         "calendars": calendar_summary,
     }
+
+
+# ── iCal subscription (lightweight, no OAuth) ────────────────────────────────
+
+
+class IcalSubscribeRequest(BaseModel):
+    household_id: uuid.UUID
+    name: str = Field(..., min_length=1, max_length=255)
+    ical_url: HttpUrl
+    color: str | None = None
+    profile_id: uuid.UUID | None = None
+
+
+@router.post(
+    "/integrations/ical/subscribe",
+    status_code=status.HTTP_201_CREATED,
+)
+async def subscribe_ical(
+    payload: IcalSubscribeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
+) -> dict:
+    """Subscribe to a read-only iCal (.ics) URL.
+
+    Validates the URL by fetching and parsing it once before saving.
+    Designed for Google Calendar's "Secret address in iCal format" and
+    similar exports — no OAuth required.
+    """
+    if current_profile.household_id != payload.household_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
+
+    url = str(payload.ical_url)
+
+    # Validate the URL by fetching it once.
+    try:
+        events = await ICalSubscription().fetch_and_parse(url)
+    except httpx.HTTPError as exc:
+        logger.warning("iCal validation fetch failed for %s: %s", url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Could not fetch iCal URL: {exc}",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - parser is permissive
+        logger.warning("iCal parse failed for %s: %s", url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Fetched URL did not contain valid iCalendar data",
+        ) from exc
+
+    # Reject if URL parses but contains zero VEVENTs — likely the wrong URL.
+    if not events:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No events found at this URL — check that you copied the "
+            "iCal/.ics address (not the public HTML link)",
+        )
+
+    cal = SourceCalendar(
+        household_id=payload.household_id,
+        profile_id=payload.profile_id,
+        provider=CalendarProvider.ical,
+        name=payload.name,
+        external_id=url,
+        color=payload.color,
+        is_read_only=True,
+    )
+    db.add(cal)
+    await db.flush()
+    await db.refresh(cal)
+
+    # Kick off the initial full sync in the background.
+    sync_single_calendar_task.delay(str(cal.id))
+
+    return {
+        "id": str(cal.id),
+        "name": cal.name,
+        "provider": cal.provider.value,
+        "events_preview_count": len(events),
+        "sync_queued": True,
+    }
+
+
+@router.delete(
+    "/integrations/ical/{calendar_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def unsubscribe_ical(
+    calendar_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
+) -> None:
+    """Remove an iCal subscription and all its synced events."""
+    cal = await db.get(SourceCalendar, calendar_id)
+    if not cal:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Calendar not found"
+        )
+    if cal.household_id != current_profile.household_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+        )
+    if cal.provider != CalendarProvider.ical:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only iCal subscriptions can be removed via this endpoint",
+        )
+
+    await db.delete(cal)
+    await db.flush()

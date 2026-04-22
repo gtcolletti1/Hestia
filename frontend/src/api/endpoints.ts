@@ -264,6 +264,26 @@ export const integrations = {
     client.get("/integrations/status", {
       params: { household_id: householdId },
     }),
+
+  subscribeIcal: (data: {
+    household_id: string;
+    name: string;
+    ical_url: string;
+    color?: string;
+  }) =>
+    client.post<{
+      id: string;
+      name: string;
+      provider: string;
+      events_preview_count: number;
+      sync_queued: boolean;
+    }>("/integrations/ical/subscribe", data),
+
+  unsubscribeIcal: (calendarId: string) =>
+    client.delete(`/integrations/ical/${calendarId}`),
+
+  syncCalendar: (calendarId: string) =>
+    client.get(`/integrations/calendars/sync/${calendarId}`),
 };
 
 // --- Weather ---

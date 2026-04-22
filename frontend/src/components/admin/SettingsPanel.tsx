@@ -28,9 +28,17 @@ interface HouseholdSettings {
   screensaver_transition_seconds: number;
 }
 
+interface IcalCalendarSummary {
+  id: string;
+  name: string;
+  provider: string;
+  last_synced_at: string | null;
+}
+
 interface IntegrationStatus {
   google: boolean;
   microsoft: boolean;
+  calendars?: IcalCalendarSummary[];
 }
 
 const DEFAULT_SETTINGS: HouseholdSettings = {
@@ -88,7 +96,7 @@ export default function SettingsPanel() {
       integrationsApi
         .getStatus(householdId!)
         .then((r) => r.data as IntegrationStatus)
-        .catch(() => ({ google: false, microsoft: false })),
+        .catch<IntegrationStatus>(() => ({ google: false, microsoft: false, calendars: [] })),
     enabled: !!householdId,
   });
 
@@ -194,6 +202,73 @@ export default function SettingsPanel() {
       // handle error silently
     }
   };
+
+  const [icalForm, setIcalForm] = useState<{
+    open: boolean;
+    name: string;
+    url: string;
+    error: string | null;
+    submitting: boolean;
+  }>({ open: false, name: "", url: "", error: null, submitting: false });
+
+  const submitIcal = async () => {
+    if (!householdId) return;
+    setIcalForm((f) => ({ ...f, error: null, submitting: true }));
+    try {
+      const { data } = await integrationsApi.subscribeIcal({
+        household_id: householdId,
+        name: icalForm.name.trim(),
+        ical_url: icalForm.url.trim(),
+      });
+      setIcalForm({ open: false, name: "", url: "", error: null, submitting: false });
+      queryClient.invalidateQueries({ queryKey: ["integrations", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      // Toast: confirm preview event count
+      setSaveError(null);
+      setShowSaved(true);
+      setTimeout(() => setShowSaved(false), 4000);
+      console.info(`Subscribed: ${data.events_preview_count} events found`);
+    } catch (err: unknown) {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ?? "Could not subscribe to that URL";
+      setIcalForm((f) => ({
+        ...f,
+        error: typeof detail === "string" ? detail : "Could not subscribe to that URL",
+        submitting: false,
+      }));
+    }
+  };
+
+  const unsubscribeIcal = async (calendarId: string) => {
+    if (!confirm("Remove this calendar subscription? Synced events will be deleted.")) return;
+    try {
+      await integrationsApi.unsubscribeIcal(calendarId);
+      queryClient.invalidateQueries({ queryKey: ["integrations", "status"] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+    } catch {
+      // ignore
+    }
+  };
+
+  const syncIcal = async (calendarId: string) => {
+    try {
+      await integrationsApi.syncCalendar(calendarId);
+      setShowSaved(true);
+      setTimeout(() => setShowSaved(false), 3000);
+      // Re-fetch after a short delay so the sync has time to write events
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["integrations", "status"] });
+        queryClient.invalidateQueries({ queryKey: ["events"] });
+      }, 2500);
+    } catch {
+      // ignore
+    }
+  };
+
+  const icalCalendars = (integrationStatus?.calendars ?? []).filter(
+    (c) => c.provider === "ical",
+  );
 
   return (
     <div className="max-w-2xl mx-auto space-y-8">
@@ -658,8 +733,148 @@ export default function SettingsPanel() {
               {integrationStatus?.microsoft ? "Connected" : "Connect"}
             </button>
           </div>
+
+          {/* iCal Subscription (lightweight, no OAuth) */}
+          <div className="flex items-center justify-between rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:col-span-2">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🔗</span>
+              <div>
+                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  iCal Subscription
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Read-only. Works with Google Calendar's <em>Secret address in iCal format</em>,
+                  Apple iCloud, Outlook web — anything that publishes a <code>.ics</code> URL.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setIcalForm({ open: true, name: "", url: "", error: null, submitting: false })
+              }
+              className="rounded-lg px-3 py-2 text-xs font-medium min-h-[44px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 transition-colors whitespace-nowrap"
+            >
+              + Add URL
+            </button>
+          </div>
+
+          {/* Subscribed iCal calendars */}
+          {icalCalendars.length > 0 && (
+            <div className="sm:col-span-2 space-y-2">
+              <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-2">
+                Subscribed calendars
+              </div>
+              {icalCalendars.map((cal) => (
+                <div
+                  key={cal.id}
+                  className="flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-2 text-sm"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium truncate text-gray-900 dark:text-gray-100">
+                      {cal.name}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {cal.last_synced_at
+                        ? `Last synced ${new Date(cal.last_synced_at).toLocaleString()}`
+                        : "Not yet synced"}
+                    </div>
+                  </div>
+                  <div className="flex gap-2 ml-3">
+                    <button
+                      type="button"
+                      onClick={() => syncIcal(cal.id)}
+                      className="rounded-md px-2.5 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600"
+                    >
+                      Sync now
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => unsubscribeIcal(cal.id)}
+                      className="rounded-md px-2.5 py-1.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
+
+      {/* iCal subscribe modal */}
+      {icalForm.open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !icalForm.submitting && setIcalForm((f) => ({ ...f, open: false }))}
+        >
+          <div
+            className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-800 p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              Subscribe to a calendar
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Paste a <code>.ics</code> URL. For Google Calendar: open the calendar's settings →
+              <em> Integrate calendar</em> → copy the <strong>Secret address in iCal format</strong>.
+            </p>
+
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Calendar name
+            </label>
+            <input
+              type="text"
+              value={icalForm.name}
+              onChange={(e) => setIcalForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Mom's Google Calendar"
+              className="w-full mb-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+              autoFocus
+            />
+
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              iCal URL
+            </label>
+            <input
+              type="url"
+              value={icalForm.url}
+              onChange={(e) => setIcalForm((f) => ({ ...f, url: e.target.value }))}
+              placeholder="https://calendar.google.com/calendar/ical/.../basic.ics"
+              className="w-full mb-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 font-mono"
+            />
+
+            {icalForm.error && (
+              <div className="mb-3 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-2 text-sm">
+                {icalForm.error}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 mt-2">
+              <button
+                type="button"
+                disabled={icalForm.submitting}
+                onClick={() => setIcalForm((f) => ({ ...f, open: false }))}
+                className="rounded-lg px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={
+                  icalForm.submitting ||
+                  !icalForm.name.trim() ||
+                  !icalForm.url.trim()
+                }
+                onClick={submitIcal}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              >
+                {icalForm.submitting ? "Validating…" : "Subscribe"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* System */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
