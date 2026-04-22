@@ -3,6 +3,7 @@ import { households, profiles as profilesApi, auth } from "@/api/endpoints";
 import client from "@/api/client";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
+import HestiaLogo from "@/components/shared/HestiaLogo";
 
 const PRESET_COLORS = [
   "#EF4444", "#F97316", "#F59E0B", "#EAB308",
@@ -107,10 +108,17 @@ export default function SetupWizard() {
         {/* Step 1: Create household */}
         {step === 1 && (
           <div className="space-y-6 text-center">
-            <div className="text-5xl">🏠</div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Welcome to Family Hub!
-            </h1>
+            <div className="flex justify-center">
+              <HestiaLogo size={64} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                Welcome to Hestia
+              </h1>
+              <p className="mt-1 text-xs uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">
+                Hearth &amp; Home
+              </p>
+            </div>
             <p className="text-gray-500 dark:text-gray-400">
               Let&apos;s set up your household to get started.
             </p>

@@ -885,12 +885,13 @@ export default function SettingsPanel() {
           <div className="text-sm text-gray-600 dark:text-gray-400">
             <p>
               <span className="font-medium text-gray-900 dark:text-gray-100">
-                Family Hub
+                Hestia
               </span>{" "}
               v0.1.0
             </p>
             <p className="mt-1">
-              A family display dashboard for organizing your household.
+              A warm family display dashboard, named after the Greek goddess of
+              hearth and home.
             </p>
           </div>
           <div className="flex gap-3">

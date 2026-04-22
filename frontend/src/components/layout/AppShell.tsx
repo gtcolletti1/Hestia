@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
 import Clock from "@/components/shared/Clock";
+import HestiaLogo from "@/components/shared/HestiaLogo";
 import NotificationToast from "@/components/shared/NotificationToast";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -78,6 +79,15 @@ export default function AppShell() {
       {/* Top bar */}
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-700 dark:bg-gray-800">
         <div className="flex items-center gap-4">
+          <Link
+            to="/"
+            className="flex items-center gap-2 text-gray-800 transition-opacity hover:opacity-80 dark:text-gray-100"
+            aria-label="Hestia home"
+          >
+            <HestiaLogo size={28} />
+            <span className="text-lg font-semibold tracking-tight">Hestia</span>
+          </Link>
+          <span className="hidden h-6 w-px bg-gray-200 dark:bg-gray-700 sm:block" />
           <Clock />
           {householdName && (
             <span className="text-sm font-medium text-gray-500 dark:text-gray-400">

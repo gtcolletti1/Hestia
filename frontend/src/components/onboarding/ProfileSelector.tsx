@@ -2,6 +2,7 @@ import { useState } from "react";
 import { auth } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
+import HestiaLogo from "@/components/shared/HestiaLogo";
 import type { Profile } from "@/types";
 
 export default function ProfileSelector() {
@@ -118,10 +119,17 @@ export default function ProfileSelector() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6 dark:bg-gray-900">
       <div className="w-full max-w-lg rounded-2xl bg-white p-8 shadow-xl dark:bg-gray-800 text-center space-y-6">
-        <div className="text-4xl">👋</div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-          {householdName || "Family Hub"}
-        </h1>
+        <div className="flex justify-center">
+          <HestiaLogo size={56} />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            {householdName || "Hestia"}
+          </h1>
+          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">
+            Hearth &amp; Home
+          </p>
+        </div>
         <p className="text-gray-500 dark:text-gray-400">Who&apos;s here?</p>
         {error && (
           <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
