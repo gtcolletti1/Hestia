@@ -8,9 +8,8 @@ celery_app = Celery(
     "family_hub",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
+    include=["app.tasks.calendar_sync"],
 )
-
-celery_app.autodiscover_tasks(["app.tasks"])
 
 celery_app.conf.update(
     task_serializer="json",
