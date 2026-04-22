@@ -13,7 +13,7 @@ import { events as eventsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import type { CalendarEvent } from "./types";
-import { mapEventToCalendarEvent } from "./types";
+import { mapEventToCalendarEvent, isMultiDay } from "./types";
 import EventModal from "./EventModal";
 import QuickAddEvent from "./QuickAddEvent";
 
@@ -48,7 +48,9 @@ export default function DayView({ date }: DayViewProps) {
     enabled: !!householdId,
   });
 
-  const dayEvents = rawEvents.map((ev) => mapEventToCalendarEvent(ev, profiles));
+  const allEvents = rawEvents.map((ev) => mapEventToCalendarEvent(ev, profiles));
+  const bannerEvents = allEvents.filter((e) => e.all_day || isMultiDay(e));
+  const dayEvents = allEvents.filter((e) => !e.all_day && !isMultiDay(e));
 
   const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => START_HOUR + i);
 
@@ -85,6 +87,29 @@ export default function DayView({ date }: DayViewProps) {
 
   return (
     <div className="relative">
+      {/* All-day / multi-day banner */}
+      {bannerEvents.length > 0 && (
+        <div className="mb-2 flex items-start gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+          <span className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 pt-1 w-12 text-right shrink-0">
+            all-day
+          </span>
+          <div className="flex flex-wrap gap-1 flex-1">
+            {bannerEvents.map((ev) => (
+              <button
+                key={ev.id}
+                onClick={() => setSelectedEvent(ev)}
+                className="rounded px-2 py-1 text-sm text-white text-left cursor-pointer hover:opacity-90 transition-opacity"
+                style={{ backgroundColor: ev.profile_color || "#3b82f6" }}
+              >
+                {ev.recurrence_rule && <span title="Recurring">🔁 </span>}
+                {continuationLabel(ev)}
+                <span className="ml-2 text-xs opacity-90">{ev.profile_name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Time grid */}
       <div className="relative" style={{ height: `${TOTAL_HOURS * HOUR_HEIGHT_PX}px` }}>
         {hours.map((h) => {

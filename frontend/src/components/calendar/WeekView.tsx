@@ -16,7 +16,7 @@ import { events as eventsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import type { CalendarEvent } from "./types";
-import { mapEventToCalendarEvent, eventOccursOnDay } from "./types";
+import { mapEventToCalendarEvent, eventOccursOnDay, isMultiDay } from "./types";
 import EventModal from "./EventModal";
 
 interface WeekViewProps {
@@ -53,6 +53,54 @@ export default function WeekView({ date }: WeekViewProps) {
 
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
   const hours = Array.from({ length: TOTAL_HOURS }, (_, i) => START_HOUR + i);
+
+  // Split into banner (all-day or multi-day) vs timed events.
+  const bannerEvents = events.filter((e) => e.all_day || isMultiDay(e));
+  const timedEvents = events.filter((e) => !e.all_day && !isMultiDay(e));
+
+  // Compute the column span (1-based, into the 7-col day grid) for each
+  // banner event within the visible week, then assign rows greedily so they
+  // don't visually overlap.
+  type BannerLayout = {
+    ev: CalendarEvent;
+    startCol: number; // 1..7
+    endCol: number; // 1..7 inclusive
+    row: number; // 0-based
+  };
+  const weekStartDay = startOfDay(weekStart);
+  const weekEndDay = startOfDay(addDays(weekStart, 6));
+  const layouts: BannerLayout[] = [];
+  const rowEnds: number[] = []; // last endCol per row
+
+  const sortedBanners = [...bannerEvents].sort((a, b) =>
+    a.start.localeCompare(b.start),
+  );
+  for (const ev of sortedBanners) {
+    const evStart = parseISO(ev.start);
+    const evEndExclusive = parseISO(ev.end);
+    // Last day occupied (treat exclusive end -1ms).
+    const evLastDay = startOfDay(new Date(evEndExclusive.getTime() - 1));
+    const visibleStartDay = evStart < weekStart ? weekStartDay : startOfDay(evStart);
+    const visibleEndDay = evLastDay > weekEndDay ? weekEndDay : evLastDay;
+    if (visibleEndDay < weekStartDay || visibleStartDay > weekEndDay) continue;
+    const startCol =
+      Math.round(
+        (visibleStartDay.getTime() - weekStartDay.getTime()) / 86400000,
+      ) + 1;
+    const endCol =
+      Math.round(
+        (visibleEndDay.getTime() - weekStartDay.getTime()) / 86400000,
+      ) + 1;
+    let row = rowEnds.findIndex((end) => end < startCol);
+    if (row === -1) {
+      row = rowEnds.length;
+      rowEnds.push(endCol);
+    } else {
+      rowEnds[row] = endCol;
+    }
+    layouts.push({ ev, startCol, endCol, row });
+  }
+  const bannerRowCount = rowEnds.length;
 
   function getEventStyle(ev: CalendarEvent, day: Date) {
     const start = parseISO(ev.start);
@@ -109,6 +157,37 @@ export default function WeekView({ date }: WeekViewProps) {
         ))}
       </div>
 
+      {/* All-day / multi-day banner row */}
+      {bannerRowCount > 0 && (
+        <div className="grid grid-cols-[56px_repeat(7,1fr)] border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/30">
+          <div className="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 px-1 py-1 text-right pr-2">
+            all-day
+          </div>
+          <div
+            className="col-span-7 grid grid-cols-7 gap-y-0.5 py-1 px-0.5"
+            style={{ gridTemplateRows: `repeat(${bannerRowCount}, minmax(22px, auto))` }}
+          >
+            {layouts.map(({ ev, startCol, endCol, row }) => (
+              <button
+                key={`${ev.id}-${row}`}
+                onClick={() => setSelectedEvent(ev)}
+                className="rounded px-1.5 py-0.5 text-xs text-white truncate text-left cursor-pointer hover:opacity-90 transition-opacity mx-0.5"
+                style={{
+                  gridColumnStart: startCol,
+                  gridColumnEnd: endCol + 1,
+                  gridRowStart: row + 1,
+                  backgroundColor: ev.profile_color || "#3b82f6",
+                }}
+                title={ev.title}
+              >
+                {ev.recurrence_rule ? "🔁 " : ""}
+                {ev.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Grid body */}
       <div className="grid grid-cols-[56px_repeat(7,1fr)]">
         {/* Time labels column + 7 day columns */}
@@ -127,7 +206,7 @@ export default function WeekView({ date }: WeekViewProps) {
         </div>
 
         {days.map((d) => {
-          const dayEvents = events.filter((e) => eventOccursOnDay(e, d));
+          const dayEvents = timedEvents.filter((e) => eventOccursOnDay(e, d));
           return (
             <div
               key={d.toISOString()}
