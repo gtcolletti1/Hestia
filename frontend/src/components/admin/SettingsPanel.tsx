@@ -20,6 +20,7 @@ interface HouseholdSettings {
     weather: boolean;
   };
   privacy_mode: boolean;
+  time_format: "12h" | "24h";
   weather_lat: number | null;
   weather_lon: number | null;
   weather_units: string;
@@ -44,6 +45,7 @@ const DEFAULT_SETTINGS: HouseholdSettings = {
     weather: true,
   },
   privacy_mode: false,
+  time_format: "12h",
   weather_lat: null,
   weather_lon: null,
   weather_units: "imperial",
@@ -380,6 +382,45 @@ export default function SettingsPanel() {
             <span
               className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
                 form.privacy_mode ? "translate-x-5" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+      </section>
+
+      {/* Time Format */}
+      <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+          🕐 Time Format
+        </h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              24-Hour Clock
+            </span>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Show {form.time_format === "24h" ? "14:30" : "2:30 PM"} format everywhere
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const newFormat = form.time_format === "24h" ? "12h" : "24h";
+              const updated = { ...form, time_format: newFormat as "12h" | "24h" };
+              setForm(updated);
+              if (isAdmin) saveMutation.mutate(updated);
+            }}
+            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors min-h-[44px] items-center ${
+              form.time_format === "24h"
+                ? "bg-blue-600"
+                : "bg-gray-300 dark:bg-gray-600"
+            }`}
+            role="switch"
+            aria-checked={form.time_format === "24h"}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                form.time_format === "24h" ? "translate-x-5" : "translate-x-0.5"
               }`}
             />
           </button>

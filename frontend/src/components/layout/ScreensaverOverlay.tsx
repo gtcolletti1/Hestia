@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { formatTime } from "@/utils/timeFormat";
 import { photos } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 
 interface Photo {
   id: string;
@@ -17,6 +19,7 @@ interface ScreensaverOverlayProps {
 
 export default function ScreensaverOverlay({ onDismiss, transitionSeconds = 10 }: ScreensaverOverlayProps) {
   const householdId = useHouseholdStore((s) => s.householdId);
+  const { timeFormat } = useHouseholdSettings();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [now, setNow] = useState(new Date());
 
@@ -82,7 +85,7 @@ export default function ScreensaverOverlay({ onDismiss, transitionSeconds = 10 }
       {/* Clock and date */}
       <div className="relative z-10 text-center text-white select-none">
         <p className="text-8xl font-thin tracking-wider tabular-nums">
-          {format(now, "h:mm")}
+          {formatTime(now, "h:mm", timeFormat)}
         </p>
         <p className="text-3xl font-light mt-2 tracking-wide opacity-90">
           {format(now, "EEEE, MMMM d")}

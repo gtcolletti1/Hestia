@@ -1,6 +1,8 @@
 """Pydantic v2 schemas for Admin / Household settings."""
 
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -22,6 +24,7 @@ class HouseholdSettings(BaseModel):
     accent_color: str = "#4F46E5"
     modules_enabled: ModulesEnabled = ModulesEnabled()
     privacy_mode: bool = False
+    time_format: Literal["12h", "24h"] = "12h"
     weather_lat: float | None = None
     weather_lon: float | None = None
     weather_units: str = "imperial"  # "imperial" | "metric"
@@ -35,6 +38,7 @@ class HouseholdSettingsUpdate(BaseModel):
     accent_color: str | None = None
     modules_enabled: ModulesEnabled | None = None
     privacy_mode: bool | None = None
+    time_format: Literal["12h", "24h"] | None = None
     weather_lat: float | None = None
     weather_lon: float | None = None
     weather_units: str | None = None

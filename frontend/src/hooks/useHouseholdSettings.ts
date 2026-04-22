@@ -22,6 +22,7 @@ export interface HouseholdSettings {
   accent_color: string;
   modules_enabled: ModulesEnabled;
   privacy_mode: boolean;
+  time_format: "12h" | "24h";
   weather_lat: number | null;
   weather_lon: number | null;
   weather_units: string;
@@ -74,5 +75,6 @@ export function useHouseholdSettings() {
     isLoading: query.isLoading,
     modulesEnabled: query.data?.modules_enabled ?? DEFAULT_MODULES,
     privacyMode: query.data?.privacy_mode ?? false,
+    timeFormat: (query.data?.time_format ?? "12h") as "12h" | "24h",
   };
 }

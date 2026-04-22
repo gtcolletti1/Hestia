@@ -7,8 +7,10 @@ import {
   addHours,
   differenceInMinutes,
 } from "date-fns";
+import { formatTime } from "@/utils/timeFormat";
 import { events as eventsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import type { CalendarEvent } from "./types";
 import { mapEventToCalendarEvent } from "./types";
 import EventModal from "./EventModal";
@@ -29,6 +31,7 @@ export default function DayView({ date }: DayViewProps) {
 
   const householdId = useHouseholdStore((s) => s.householdId);
   const profiles = useHouseholdStore((s) => s.profiles);
+  const { timeFormat } = useHouseholdSettings();
 
   const dayStart = format(date, "yyyy-MM-dd");
 
@@ -69,7 +72,7 @@ export default function DayView({ date }: DayViewProps) {
       {/* Time grid */}
       <div className="relative" style={{ height: `${TOTAL_HOURS * HOUR_HEIGHT_PX}px` }}>
         {hours.map((h) => {
-          const label = format(addHours(startOfDay(date), h), "h a");
+          const label = formatTime(addHours(startOfDay(date), h), "h a", timeFormat);
           const top = (h - START_HOUR) * HOUR_HEIGHT_PX;
           return (
             <div
@@ -110,7 +113,7 @@ export default function DayView({ date }: DayViewProps) {
                 {ev.title}
               </p>
               <p className="text-xs opacity-90">
-                {format(parseISO(ev.start), "h:mm a")}
+                {formatTime(parseISO(ev.start), "h:mm a", timeFormat)}
               </p>
               <span className="inline-block mt-0.5 text-xs bg-white/20 rounded px-1">
                 {ev.profile_name}

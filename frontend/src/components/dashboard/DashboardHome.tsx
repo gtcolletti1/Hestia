@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
+import { formatTime } from "@/utils/timeFormat";
 import { dashboard } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
@@ -42,7 +43,7 @@ function SkeletonCard() {
 
 // ── Sub-components ──
 
-function AgendaSection({ buckets }: { buckets: AgendaBucket[] }) {
+function AgendaSection({ buckets, timeFormat }: { buckets: AgendaBucket[]; timeFormat: "12h" | "24h" }) {
   const hasEvents = buckets.some((b) => b.events.length > 0);
 
   return (
@@ -81,9 +82,9 @@ function AgendaSection({ buckets }: { buckets: AgendaBucket[] }) {
                   <div className="min-w-0 flex-1 privacy-blur">
                     <p className="font-medium truncate">{ev.title}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {format(parseISO(ev.start_time), "h:mm a")}
+                      {formatTime(parseISO(ev.start_time), "h:mm a", timeFormat)}
                       {" – "}
-                      {format(parseISO(ev.end_time), "h:mm a")}
+                      {formatTime(parseISO(ev.end_time), "h:mm a", timeFormat)}
                     </p>
                     {ev.profile_name && (
                       <p className="text-xs text-gray-400 dark:text-gray-500">
@@ -198,7 +199,7 @@ function ListsWidget({ lists }: { lists: DashboardData["active_lists"] }) {
 
 export default function DashboardHome() {
   const householdId = useHouseholdStore((s) => s.householdId);
-  const { modulesEnabled } = useHouseholdSettings();
+  const { modulesEnabled, timeFormat } = useHouseholdSettings();
 
   const { data, isLoading, isError } = useQuery<DashboardData>({
     queryKey: ["dashboard", householdId],
@@ -268,7 +269,7 @@ export default function DashboardHome() {
                   ))}
                 </div>
               ) : (
-                <AgendaSection buckets={data?.agenda ?? []} />
+                <AgendaSection buckets={data?.agenda ?? []} timeFormat={timeFormat} />
               )}
             </div>
           )}

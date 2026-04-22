@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
+import { formatTime } from "@/utils/timeFormat";
 
 export default function Clock() {
   const [now, setNow] = useState(() => new Date());
+  const { timeFormat } = useHouseholdSettings();
 
   useEffect(() => {
     // Sync to the start of the next minute for precise updates
@@ -29,10 +31,10 @@ export default function Clock() {
   return (
     <div className="flex items-baseline gap-4">
       <span className="text-3xl font-bold tabular-nums tracking-tight">
-        {format(now, "h:mm a")}
+        {formatTime(now, "h:mm a", timeFormat)}
       </span>
       <span className="text-lg text-gray-500 dark:text-gray-400">
-        {format(now, "EEEE, MMMM d")}
+        {formatTime(now, "EEEE, MMMM d", timeFormat)}
       </span>
     </div>
   );

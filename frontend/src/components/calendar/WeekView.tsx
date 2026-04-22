@@ -11,8 +11,10 @@ import {
   isSameDay,
   isToday,
 } from "date-fns";
+import { formatTime } from "@/utils/timeFormat";
 import { events as eventsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import type { CalendarEvent } from "./types";
 import { mapEventToCalendarEvent } from "./types";
 import EventModal from "./EventModal";
@@ -33,6 +35,7 @@ export default function WeekView({ date }: WeekViewProps) {
 
   const householdId = useHouseholdStore((s) => s.householdId);
   const storeProfiles = useHouseholdStore((s) => s.profiles);
+  const { timeFormat } = useHouseholdSettings();
 
   const { data: rawEvents = [], isLoading } = useQuery({
     queryKey: ["events", "week", format(weekStart, "yyyy-MM-dd"), householdId],
@@ -102,7 +105,7 @@ export default function WeekView({ date }: WeekViewProps) {
               style={{ top: `${(h - START_HOUR) * HOUR_HEIGHT_PX}px` }}
             >
               <span className="text-xs text-gray-400 dark:text-gray-500 pl-1 select-none">
-                {format(addHours(startOfDay(date), h), "h a")}
+                {formatTime(addHours(startOfDay(date), h), "h a", timeFormat)}
               </span>
             </div>
           ))}

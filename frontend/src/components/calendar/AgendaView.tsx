@@ -7,8 +7,10 @@ import {
   isToday,
   isTomorrow,
 } from "date-fns";
+import { formatTime } from "@/utils/timeFormat";
 import { events as eventsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import type { CalendarEvent } from "./types";
 import { mapEventToCalendarEvent } from "./types";
 import EventModal from "./EventModal";
@@ -27,6 +29,7 @@ export default function AgendaView({ date }: AgendaViewProps) {
 
   const householdId = useHouseholdStore((s) => s.householdId);
   const storeProfiles = useHouseholdStore((s) => s.profiles);
+  const { timeFormat } = useHouseholdSettings();
 
   const { data: rawEvents = [], isLoading } = useQuery({
     queryKey: ["events", "agenda", format(date, "yyyy-MM-dd"), daysToShow, householdId],
@@ -108,9 +111,9 @@ export default function AgendaView({ date }: AgendaViewProps) {
                         {ev.title}
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {format(parseISO(ev.start), "h:mm a")}
+                        {formatTime(parseISO(ev.start), "h:mm a", timeFormat)}
                         {" – "}
-                        {format(parseISO(ev.end), "h:mm a")}
+                        {formatTime(parseISO(ev.end), "h:mm a", timeFormat)}
                       </p>
                       {ev.location && (
                         <p className="text-sm text-gray-400 dark:text-gray-500 truncate">

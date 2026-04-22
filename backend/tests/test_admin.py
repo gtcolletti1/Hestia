@@ -27,6 +27,7 @@ async def test_get_default_settings(
     assert body["name"] == sample_household.name
     assert body["theme"] == "light"
     assert body["privacy_mode"] is False
+    assert body["time_format"] == "12h"
     assert body["modules_enabled"]["calendar"] is True
     assert body["modules_enabled"]["routines"] is True
     assert body["modules_enabled"]["lists"] is True
@@ -55,6 +56,29 @@ async def test_update_settings_theme(
     )
     assert resp.status_code == 200
     assert resp.json()["theme"] == "dark"
+
+
+async def test_update_settings_time_format(
+    authed_client: AsyncClient, sample_household: Household
+) -> None:
+    resp = await authed_client.put(
+        "/api/admin/settings",
+        params={"household_id": str(sample_household.id)},
+        json={"time_format": "24h"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["time_format"] == "24h"
+
+
+async def test_update_settings_time_format_invalid_rejected(
+    authed_client: AsyncClient, sample_household: Household
+) -> None:
+    resp = await authed_client.put(
+        "/api/admin/settings",
+        params={"household_id": str(sample_household.id)},
+        json={"time_format": "13h"},
+    )
+    assert resp.status_code == 422
 
 
 async def test_toggle_module(

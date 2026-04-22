@@ -1,5 +1,7 @@
 import type { NotificationItem } from "@/hooks/useNotifications";
-import { format, parseISO } from "date-fns";
+import { parseISO } from "date-fns";
+import { formatTime } from "@/utils/timeFormat";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 
 interface NotificationToastProps {
   toasts: NotificationItem[];
@@ -7,6 +9,8 @@ interface NotificationToastProps {
 }
 
 export default function NotificationToast({ toasts, onDismiss }: NotificationToastProps) {
+  const { timeFormat } = useHouseholdSettings();
+
   if (toasts.length === 0) return null;
 
   return (
@@ -22,7 +26,7 @@ export default function NotificationToast({ toasts, onDismiss }: NotificationToa
               {toast.event_title}
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-              Starts at {format(parseISO(toast.event_start), "h:mm a")}
+              Starts at {formatTime(parseISO(toast.event_start), "h:mm a", timeFormat)}
               {" · "}
               {toast.minutes_before}min reminder
             </p>

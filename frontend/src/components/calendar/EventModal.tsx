@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { format, parseISO } from "date-fns";
+import { formatTime } from "@/utils/timeFormat";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { events as eventsApi, reminders as remindersApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import type { CalendarEvent, EventFormData } from "./types";
 import { RECURRENCE_OPTIONS, recurrenceLabel } from "./types";
 
@@ -30,6 +32,7 @@ const EMPTY_FORM: EventFormData = {
 export default function EventModal({ event, onClose, profiles = [] }: EventModalProps) {
   const queryClient = useQueryClient();
   const householdId = useHouseholdStore((s) => s.householdId);
+  const { timeFormat } = useHouseholdSettings();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<EventFormData>(EMPTY_FORM);
   const [reminderMinutes, setReminderMinutes] = useState<string>("");
@@ -271,9 +274,9 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
               <div className="space-y-2 text-sm">
                 <p>
                   <span className="font-medium">When: </span>
-                  {format(parseISO(event.start), "EEE, MMM d · h:mm a")}
+                  {formatTime(parseISO(event.start), "EEE, MMM d · h:mm a", timeFormat)}
                   {" – "}
-                  {format(parseISO(event.end), "h:mm a")}
+                  {formatTime(parseISO(event.end), "h:mm a", timeFormat)}
                 </p>
                 {event.location && (
                   <p>
