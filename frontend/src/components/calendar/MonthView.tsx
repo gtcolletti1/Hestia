@@ -2,20 +2,18 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   format,
-  parseISO,
   startOfMonth,
   endOfMonth,
   startOfWeek,
   endOfWeek,
   addDays,
   isSameMonth,
-  isSameDay,
   isToday,
 } from "date-fns";
 import { events as eventsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import type { CalendarEvent } from "./types";
-import { mapEventToCalendarEvent } from "./types";
+import { mapEventToCalendarEvent, eventOccursOnDay } from "./types";
 
 interface MonthViewProps {
   date: Date;
@@ -63,7 +61,7 @@ export default function MonthView({ date, onSelectDay }: MonthViewProps) {
   }
 
   function eventsForDay(day: Date): CalendarEvent[] {
-    return events.filter((e) => isSameDay(parseISO(e.start), day));
+    return events.filter((e) => eventOccursOnDay(e, day));
   }
 
   return (

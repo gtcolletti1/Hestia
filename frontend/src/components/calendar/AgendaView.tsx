@@ -4,8 +4,11 @@ import {
   format,
   parseISO,
   addDays,
+  startOfDay,
+  endOfDay,
   isToday,
   isTomorrow,
+  differenceInCalendarDays,
 } from "date-fns";
 import { formatTime } from "@/utils/timeFormat";
 import { events as eventsApi } from "@/api/endpoints";
@@ -45,13 +48,34 @@ export default function AgendaView({ date }: AgendaViewProps) {
 
   const events = rawEvents.map((ev) => mapEventToCalendarEvent(ev, storeProfiles));
 
-  // Group events by date
-  const grouped = events.reduce<Record<string, CalendarEvent[]>>((acc, ev) => {
-    const key = format(parseISO(ev.start), "yyyy-MM-dd");
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(ev);
-    return acc;
-  }, {});
+  // Group events by every day they overlap within the visible window.
+  // A multi-day event appears under each of its days with a "Day X of Y" badge.
+  const windowStart = startOfDay(date);
+  const windowEnd = endOfDay(rangeEnd);
+  type AgendaItem = { ev: CalendarEvent; dayIndex: number; totalDays: number };
+  const grouped: Record<string, AgendaItem[]> = {};
+
+  for (const ev of events) {
+    const evStart = parseISO(ev.start);
+    const evEnd = parseISO(ev.end);
+    // First day visible to the user
+    const firstDay = evStart < windowStart ? windowStart : startOfDay(evStart);
+    // Last day this event occupies. iCal all-day end is exclusive (midnight of
+    // the day after), so subtract 1ms before taking startOfDay.
+    const lastDay = startOfDay(new Date(evEnd.getTime() - 1));
+    const visibleLastDay = lastDay > windowEnd ? windowEnd : lastDay;
+    if (visibleLastDay < firstDay) continue;
+
+    const totalDays = differenceInCalendarDays(lastDay, startOfDay(evStart)) + 1;
+    let cursor = firstDay;
+    while (cursor <= visibleLastDay) {
+      const key = format(cursor, "yyyy-MM-dd");
+      const dayIndex = differenceInCalendarDays(cursor, startOfDay(evStart)) + 1;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push({ ev, dayIndex, totalDays });
+      cursor = addDays(cursor, 1);
+    }
+  }
 
   // Sort date keys
   const sortedDates = Object.keys(grouped).sort();
@@ -94,9 +118,9 @@ export default function AgendaView({ date }: AgendaViewProps) {
 
           <ul className="divide-y divide-gray-100 dark:divide-gray-800">
             {grouped[dateKey]
-              .sort((a, b) => a.start.localeCompare(b.start))
-              .map((ev) => (
-                <li key={ev.id}>
+              .sort((a, b) => a.ev.start.localeCompare(b.ev.start))
+              .map(({ ev, dayIndex, totalDays }) => (
+                <li key={`${ev.id}-${dayIndex}`}>
                   <button
                     onClick={() => setSelectedEvent(ev)}
                     className="flex items-start gap-3 w-full text-left px-2 py-3 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors min-h-[56px]"
@@ -109,11 +133,16 @@ export default function AgendaView({ date }: AgendaViewProps) {
                       <p className="font-medium truncate">
                         {ev.recurrence_rule && <span title="Recurring">🔁 </span>}
                         {ev.title}
+                        {totalDays > 1 && (
+                          <span className="ml-2 text-xs font-normal text-gray-400 dark:text-gray-500">
+                            (day {dayIndex} of {totalDays})
+                          </span>
+                        )}
                       </p>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {formatTime(parseISO(ev.start), "h:mm a", timeFormat)}
-                        {" – "}
-                        {formatTime(parseISO(ev.end), "h:mm a", timeFormat)}
+                        {ev.all_day || totalDays > 1
+                          ? "All day"
+                          : `${formatTime(parseISO(ev.start), "h:mm a", timeFormat)} – ${formatTime(parseISO(ev.end), "h:mm a", timeFormat)}`}
                       </p>
                       {ev.location && (
                         <p className="text-sm text-gray-400 dark:text-gray-500 truncate">

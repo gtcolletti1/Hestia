@@ -1,4 +1,5 @@
 import type { Event, Profile } from "@/types";
+import { parseISO, startOfDay, endOfDay } from "date-fns";
 
 export interface CalendarEvent {
   id: string;
@@ -67,4 +68,25 @@ export function mapEventToCalendarEvent(
     all_day: ev.all_day,
     recurrence_rule: ev.recurrence_rule,
   };
+}
+
+/**
+ * True when `ev` overlaps the calendar day `day` at all.
+ *
+ * iCalendar (and Google Calendar) all-day events have an EXCLUSIVE end:
+ * a Mon–Fri all-day event is start=Mon 00:00, end=Sat 00:00. We use
+ * `end > startOfDay(day)` (strict) so the trailing midnight doesn't
+ * spill into Saturday.
+ */
+export function eventOccursOnDay(ev: CalendarEvent, day: Date): boolean {
+  const start = parseISO(ev.start);
+  const end = parseISO(ev.end);
+  return start <= endOfDay(day) && end > startOfDay(day);
+}
+
+/** True if the event spans more than one calendar day. */
+export function isMultiDay(ev: CalendarEvent): boolean {
+  const start = parseISO(ev.start);
+  const end = parseISO(ev.end);
+  return startOfDay(start).getTime() !== startOfDay(end).getTime();
 }

@@ -7,8 +7,8 @@ import {
   addDays,
   addHours,
   startOfDay,
+  endOfDay,
   differenceInMinutes,
-  isSameDay,
   isToday,
 } from "date-fns";
 import { formatTime } from "@/utils/timeFormat";
@@ -16,7 +16,7 @@ import { events as eventsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import type { CalendarEvent } from "./types";
-import { mapEventToCalendarEvent } from "./types";
+import { mapEventToCalendarEvent, eventOccursOnDay } from "./types";
 import EventModal from "./EventModal";
 
 interface WeekViewProps {
@@ -58,8 +58,12 @@ export default function WeekView({ date }: WeekViewProps) {
     const start = parseISO(ev.start);
     const end = parseISO(ev.end);
     const dayOrigin = addHours(startOfDay(day), START_HOUR);
-    const topMin = Math.max(0, differenceInMinutes(start, dayOrigin));
-    const durationMin = Math.max(15, differenceInMinutes(end, start));
+    const dayEndBoundary = endOfDay(day);
+    // Clip the rendered slice to *this* day for multi-day events.
+    const visibleStart = start < dayOrigin ? dayOrigin : start;
+    const visibleEnd = end > dayEndBoundary ? dayEndBoundary : end;
+    const topMin = Math.max(0, differenceInMinutes(visibleStart, dayOrigin));
+    const durationMin = Math.max(15, differenceInMinutes(visibleEnd, visibleStart));
 
     const top = (topMin / 60) * HOUR_HEIGHT_PX;
     const height = Math.min(
@@ -68,6 +72,17 @@ export default function WeekView({ date }: WeekViewProps) {
     );
 
     return { top: `${top}px`, height: `${height}px` };
+  }
+
+  function continuationLabel(ev: CalendarEvent, day: Date): string {
+    const start = parseISO(ev.start);
+    const end = parseISO(ev.end);
+    const before = start < startOfDay(day);
+    const after = end > endOfDay(day);
+    if (before && after) return `↔ ${ev.title}`;
+    if (before) return `← ${ev.title}`;
+    if (after) return `${ev.title} →`;
+    return ev.title;
   }
 
   return (
@@ -112,7 +127,7 @@ export default function WeekView({ date }: WeekViewProps) {
         </div>
 
         {days.map((d) => {
-          const dayEvents = events.filter((e) => isSameDay(parseISO(e.start), d));
+          const dayEvents = events.filter((e) => eventOccursOnDay(e, d));
           return (
             <div
               key={d.toISOString()}
@@ -142,7 +157,9 @@ export default function WeekView({ date }: WeekViewProps) {
                       backgroundColor: ev.profile_color || "#3b82f6",
                     }}
                   >
-                    {ev.recurrence_rule ? `🔁 ${ev.title}` : ev.title}
+                    {ev.recurrence_rule
+                      ? `🔁 ${continuationLabel(ev, d)}`
+                      : continuationLabel(ev, d)}
                   </button>
                 ))}
             </div>
