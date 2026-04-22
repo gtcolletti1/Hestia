@@ -126,9 +126,6 @@ export default function ProfileSelector() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
             {householdName || "Hestia"}
           </h1>
-          <p className="mt-1 text-xs uppercase tracking-[0.2em] text-amber-600 dark:text-amber-400">
-            Hearth &amp; Home
-          </p>
         </div>
         <p className="text-gray-500 dark:text-gray-400">Who&apos;s here?</p>
         {error && (
