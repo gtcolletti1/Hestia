@@ -11,6 +11,7 @@ import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
@@ -137,19 +138,26 @@ def parse_ical_text(text: str) -> list[dict]:
     events: list[dict] = []
     in_event = False
     current: dict[str, str] = {}
+    current_params: dict[str, dict[str, str]] = {}
 
     for line in _unfold_lines(text):
         if line.strip() == "BEGIN:VEVENT":
             in_event = True
             current = {}
+            current_params = {}
         elif line.strip() == "END:VEVENT" and in_event:
             in_event = False
-            events.append(_vevent_dict_to_local(current))
+            events.append(_vevent_dict_to_local(current, current_params))
         elif in_event:
             key, _, value = line.partition(":")
-            # Strip parameters (e.g., DTSTART;VALUE=DATE:20240101)
-            base_key = key.split(";")[0].strip().upper()
+            parts = key.split(";")
+            base_key = parts[0].strip().upper()
+            params: dict[str, str] = {}
+            for p in parts[1:]:
+                pk, _, pv = p.partition("=")
+                params[pk.strip().upper()] = pv.strip()
             current[base_key] = value.strip()
+            current_params[base_key] = params
 
     return events
 
@@ -165,14 +173,21 @@ def _unfold_lines(text: str) -> list[str]:
     return lines
 
 
-def _vevent_dict_to_local(props: dict[str, str]) -> dict:
+def _vevent_dict_to_local(
+    props: dict[str, str],
+    params: dict[str, dict[str, str]] | None = None,
+) -> dict:
     """Convert a parsed VEVENT property dict to a local event dict."""
+    params = params or {}
     start_raw = props.get("DTSTART", "")
     end_raw = props.get("DTEND", "")
     all_day = len(start_raw) == 8  # YYYYMMDD format
 
-    start_time = _parse_ical_datetime(start_raw)
-    end_time = _parse_ical_datetime(end_raw) if end_raw else start_time
+    start_tz = params.get("DTSTART", {}).get("TZID")
+    end_tz = params.get("DTEND", {}).get("TZID") or start_tz
+
+    start_time = _parse_ical_datetime(start_raw, start_tz)
+    end_time = _parse_ical_datetime(end_raw, end_tz) if end_raw else start_time
 
     return {
         "external_id": props.get("UID"),
@@ -187,13 +202,21 @@ def _vevent_dict_to_local(props: dict[str, str]) -> dict:
     }
 
 
-def _parse_ical_datetime(raw: str) -> datetime:
-    """Parse an iCalendar date or datetime string."""
+def _parse_ical_datetime(raw: str, tzid: str | None = None) -> datetime:
+    """Parse an iCalendar date or datetime string.
+
+    Handles three forms per RFC 5545:
+      * Date only (YYYYMMDD) — returned as midnight UTC
+      * UTC datetime (YYYYMMDDTHHmmSSZ)
+      * Floating / TZID-tagged datetime (YYYYMMDDTHHmmSS) — interpreted in
+        the supplied tzid (e.g. ``America/New_York``) and converted to UTC.
+        Without a tzid, treated as UTC for backwards compatibility.
+    """
     raw = raw.strip()
     if not raw:
         return datetime.now(timezone.utc)
 
-    # Date only: YYYYMMDD
+    # Date only: YYYYMMDD (all-day event)
     if len(raw) == 8 and raw.isdigit():
         return datetime.strptime(raw, "%Y%m%d").replace(tzinfo=timezone.utc)
 
@@ -201,9 +224,16 @@ def _parse_ical_datetime(raw: str) -> datetime:
     if raw.endswith("Z"):
         return datetime.strptime(raw, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
 
-    # Local datetime: YYYYMMDDTHHmmSS
+    # Floating / local datetime: YYYYMMDDTHHmmSS
     if "T" in raw:
-        return datetime.strptime(raw, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
+        naive = datetime.strptime(raw, "%Y%m%dT%H%M%S")
+        if tzid:
+            try:
+                local = naive.replace(tzinfo=ZoneInfo(tzid))
+                return local.astimezone(timezone.utc)
+            except ZoneInfoNotFoundError:
+                logger.warning("Unknown TZID %s, falling back to UTC", tzid)
+        return naive.replace(tzinfo=timezone.utc)
 
     return datetime.now(timezone.utc)
 
