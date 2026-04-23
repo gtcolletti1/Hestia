@@ -36,6 +36,7 @@ export default function HestiaLogo({
   const tB = `hestia-tongueB-${uid}`;
   const hot = `hestia-hot-${uid}`;
   const soft = `hestia-soft-${uid}`;
+  const ember = `hestia-ember-${uid}`;
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
       <svg
@@ -47,35 +48,39 @@ export default function HestiaLogo({
         aria-hidden="true"
       >
         <defs>
-          {/* Warm ambient halo behind the flame */}
+          {/* Warm ambient halo behind the flame — deeper bronze tones */}
           <radialGradient id={halo} cx="50%" cy="60%" r="55%">
-            <stop offset="0%" stopColor="#fde047" stopOpacity="0.55" />
-            <stop offset="55%" stopColor="#f97316" stopOpacity="0.2" />
-            <stop offset="100%" stopColor="#7c2d12" stopOpacity="0" />
+            <stop offset="0%" stopColor="#d97706" stopOpacity="0.55" />
+            <stop offset="55%" stopColor="#b45309" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#451a03" stopOpacity="0" />
           </radialGradient>
-          {/* Central tongue: bright base, fades at tip */}
+          {/* Central tongue: hot copper base, fades at tip */}
           <linearGradient id={tA} x1="0.5" y1="1" x2="0.5" y2="0">
-            <stop offset="0%" stopColor="#fef3c7" stopOpacity="0.98" />
-            <stop offset="22%" stopColor="#fde047" stopOpacity="0.95" />
-            <stop offset="55%" stopColor="#fb923c" stopOpacity="0.9" />
-            <stop offset="82%" stopColor="#dc2626" stopOpacity="0.5" />
-            <stop offset="100%" stopColor="#7c2d12" stopOpacity="0" />
+            <stop offset="0%" stopColor="#fef3c7" stopOpacity="0.95" />
+            <stop offset="22%" stopColor="#fbbf24" stopOpacity="0.92" />
+            <stop offset="55%" stopColor="#c2410c" stopOpacity="0.9" />
+            <stop offset="82%" stopColor="#7f1d1d" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#451a03" stopOpacity="0" />
           </linearGradient>
-          {/* Outer / wisp tongues: dimmer, also fades */}
+          {/* Outer / wisp tongues: dimmer bronze-red, also fades */}
           <linearGradient id={tB} x1="0.5" y1="1" x2="0.5" y2="0">
-            <stop offset="0%" stopColor="#fcd34d" stopOpacity="0.75" />
-            <stop offset="55%" stopColor="#f97316" stopOpacity="0.55" />
-            <stop offset="100%" stopColor="#b91c1c" stopOpacity="0" />
+            <stop offset="0%" stopColor="#d97706" stopOpacity="0.78" />
+            <stop offset="55%" stopColor="#b91c1c" stopOpacity="0.55" />
+            <stop offset="100%" stopColor="#7f1d1d" stopOpacity="0" />
           </linearGradient>
           {/* White-hot combustion core */}
           <radialGradient id={hot} cx="50%" cy="70%" r="50%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
-            <stop offset="45%" stopColor="#fef3c7" stopOpacity="0.85" />
-            <stop offset="100%" stopColor="#fde047" stopOpacity="0" />
+            <stop offset="0%" stopColor="#fffbeb" stopOpacity="1" />
+            <stop offset="45%" stopColor="#fde68a" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#d97706" stopOpacity="0" />
           </radialGradient>
           {/* Soft blur for the flame group only */}
           <filter id={soft} x="-30%" y="-30%" width="160%" height="160%">
             <feGaussianBlur stdDeviation="0.7" />
+          </filter>
+          {/* Tiny glow filter for floating embers */}
+          <filter id={ember} x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="0.45" />
           </filter>
         </defs>
 
@@ -143,6 +148,14 @@ export default function HestiaLogo({
 
         {/* White-hot core, sharp (no blur) */}
         <ellipse cx="32" cy="38" rx="5" ry="7" fill={`url(#${hot})`} />
+
+        {/* Floating embers — drifting up & away from the flame tip.
+            Asymmetric placement, varied sizes, with their own soft glow. */}
+        <g filter={`url(#${ember})`}>
+          <circle cx="22" cy="6" r="1.1" fill="#fbbf24" opacity="0.95" />
+          <circle cx="38" cy="10" r="0.9" fill="#fde68a" opacity="0.9" />
+          <circle cx="44" cy="3" r="0.7" fill="#f59e0b" opacity="0.85" />
+        </g>
       </svg>
       {withWordmark && (
         <span className="font-semibold tracking-tight">Hestia</span>
