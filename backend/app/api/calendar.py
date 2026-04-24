@@ -1,5 +1,8 @@
+import logging
 import uuid
+from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.rrule import rrulestr
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,6 +21,8 @@ from app.schemas.calendar import (
     SourceCalendarResponse,
     SourceCalendarUpdate,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["calendar"])
 
@@ -76,6 +81,29 @@ async def list_events(
     recur_result = await db.execute(recur_stmt)
     recurring_events = list(recur_result.scalars().all())
 
+    # Load all overrides for masters in this query so we can build a per-master
+    # skip set (RECURRENCE-ID exceptions). Scope by source_calendar_id +
+    # master_external_id since UIDs are only unique within one calendar.
+    override_stmt = (
+        select(Event)
+        .join(SourceCalendar, Event.source_calendar_id == SourceCalendar.id)
+        .where(
+            SourceCalendar.household_id == household_id,
+            Event.recurrence_id.isnot(None),
+        )
+    )
+    if profile_id is not None:
+        override_stmt = override_stmt.where(Event.profile_id == profile_id)
+    if source_calendar_id is not None:
+        override_stmt = override_stmt.where(Event.source_calendar_id == source_calendar_id)
+    override_result = await db.execute(override_stmt)
+    overrides_by_master: dict[tuple[uuid.UUID, str], list[datetime]] = defaultdict(list)
+    for ov in override_result.scalars().all():
+        if ov.master_external_id and ov.recurrence_id is not None:
+            overrides_by_master[(ov.source_calendar_id, ov.master_external_id)].append(
+                ov.recurrence_id
+            )
+
     # Deduplicate (recurring events in range already appear in db_events)
     seen_ids = {e.id for e in db_events}
     output: list[EventResponse] = []
@@ -85,29 +113,53 @@ async def list_events(
         if not ev.recurrence_rule:
             output.append(EventResponse.model_validate(ev))
 
-    # Expand recurring events into occurrences
+    # Expand recurring events into occurrences (DST-safe via ev.start_tzid).
     for ev in recurring_events:
         if ev.id not in seen_ids:
             seen_ids.add(ev.id)
 
         duration = ev.end_time - ev.start_time
+
         try:
-            rule = rrulestr(ev.recurrence_rule, dtstart=ev.start_time, ignoretz=True)
-            occurrences = rule.between(
-                range_start.replace(tzinfo=None),
-                range_end.replace(tzinfo=None),
-                inc=True,
-            )
+            master_tz = ZoneInfo(ev.start_tzid) if ev.start_tzid else timezone.utc
+        except ZoneInfoNotFoundError:
+            logger.warning("Unknown TZID %r on event %s, falling back to UTC", ev.start_tzid, ev.id)
+            master_tz = timezone.utc
+
+        local_dtstart = ev.start_time.astimezone(master_tz).replace(tzinfo=None)
+        local_range_start = range_start.astimezone(master_tz).replace(tzinfo=None)
+        local_range_end = range_end.astimezone(master_tz).replace(tzinfo=None)
+
+        # UTC instants of occurrences to skip (cancelled or moved-to-override).
+        skip_utc: set[datetime] = set()
+        if ev.exdates:
+            for raw in ev.exdates.split(","):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    skip_utc.add(datetime.fromisoformat(raw))
+                except ValueError:
+                    logger.warning("Skipping malformed exdate %r on event %s", raw, ev.id)
+        master_uid = ev.master_external_id or ev.external_id
+        if master_uid:
+            for rid in overrides_by_master.get((ev.source_calendar_id, master_uid), ()):
+                skip_utc.add(rid if rid.tzinfo else rid.replace(tzinfo=timezone.utc))
+
+        try:
+            rule = rrulestr(ev.recurrence_rule, dtstart=local_dtstart)
+            local_occs = rule.between(local_range_start, local_range_end, inc=True)
         except (ValueError, TypeError):
-            # If the RRULE is malformed, just return the original event
             ev_start = ev.start_time if ev.start_time.tzinfo else ev.start_time.replace(tzinfo=timezone.utc)
             ev_end = ev.end_time if ev.end_time.tzinfo else ev.end_time.replace(tzinfo=timezone.utc)
             if ev_start < range_end and ev_end >= range_start:
                 output.append(EventResponse.model_validate(ev))
             continue
 
-        for occ_start_naive in occurrences:
-            occ_start = occ_start_naive.replace(tzinfo=timezone.utc)
+        for local_occ in local_occs:
+            occ_start = local_occ.replace(tzinfo=master_tz).astimezone(timezone.utc)
+            if occ_start in skip_utc:
+                continue
             occ_end = occ_start + duration
             output.append(
                 EventResponse(

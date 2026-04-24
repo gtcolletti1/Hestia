@@ -94,6 +94,11 @@ class Event(Base):
         nullable=True,
     )
     external_id: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    master_external_id: Mapped[Optional[str]] = mapped_column(
+        String(512),
+        nullable=True,
+        comment="Parent UID — same as external_id for masters; UID part for overrides",
+    )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     location: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -106,6 +111,21 @@ class Event(Base):
     all_day: Mapped[bool] = mapped_column(default=False, nullable=False)
     recurrence_rule: Mapped[Optional[str]] = mapped_column(
         String(1024), nullable=True, comment="iCal RRULE string"
+    )
+    recurrence_id: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="UTC instant of overridden master occurrence (override rows only)",
+    )
+    exdates: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Comma-separated UTC ISO datetimes of cancelled master occurrences",
+    )
+    start_tzid: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        comment="IANA tz of master DTSTART, used for DST-correct RRULE expansion",
     )
     color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)
     is_private: Mapped[bool] = mapped_column(

@@ -139,15 +139,17 @@ def parse_ical_text(text: str) -> list[dict]:
     in_event = False
     current: dict[str, str] = {}
     current_params: dict[str, dict[str, str]] = {}
+    exdate_lines: list[tuple[str, dict[str, str]]] = []
 
     for line in _unfold_lines(text):
         if line.strip() == "BEGIN:VEVENT":
             in_event = True
             current = {}
             current_params = {}
+            exdate_lines = []
         elif line.strip() == "END:VEVENT" and in_event:
             in_event = False
-            events.append(_vevent_dict_to_local(current, current_params))
+            events.append(_vevent_dict_to_local(current, current_params, exdate_lines))
         elif in_event:
             key, _, value = line.partition(":")
             parts = key.split(";")
@@ -156,8 +158,12 @@ def parse_ical_text(text: str) -> list[dict]:
             for p in parts[1:]:
                 pk, _, pv = p.partition("=")
                 params[pk.strip().upper()] = pv.strip()
-            current[base_key] = value.strip()
-            current_params[base_key] = params
+            value = value.strip()
+            if base_key == "EXDATE":
+                exdate_lines.append((value, params))
+            else:
+                current[base_key] = value
+                current_params[base_key] = params
 
     return events
 
@@ -176,9 +182,22 @@ def _unfold_lines(text: str) -> list[str]:
 def _vevent_dict_to_local(
     props: dict[str, str],
     params: dict[str, dict[str, str]] | None = None,
+    exdate_lines: list[tuple[str, dict[str, str]]] | None = None,
 ) -> dict:
-    """Convert a parsed VEVENT property dict to a local event dict."""
+    """Convert a parsed VEVENT property dict to a local event dict.
+
+    Handles RFC 5545 recurrence overrides:
+
+    * ``RECURRENCE-ID`` marks this VEVENT as an exception/override of a
+      single instance of a recurring series. The composite ``external_id``
+      is ``"<UID>#<recurrence-id-utc-isoformat>"`` so overrides occupy
+      their own row, while ``master_external_id`` keeps the parent UID.
+    * ``EXDATE`` (one or more lines, each with one or more comma-separated
+      values) lists cancelled occurrences of the master series. They are
+      stored on the master as a comma-separated list of UTC ISO datetimes.
+    """
     params = params or {}
+    exdate_lines = exdate_lines or []
     start_raw = props.get("DTSTART", "")
     end_raw = props.get("DTEND", "")
     all_day = len(start_raw) == 8  # YYYYMMDD format
@@ -189,15 +208,46 @@ def _vevent_dict_to_local(
     start_time = _parse_ical_datetime(start_raw, start_tz)
     end_time = _parse_ical_datetime(end_raw, end_tz) if end_raw else start_time
 
+    uid = props.get("UID")
+
+    rid_raw = props.get("RECURRENCE-ID")
+    rid_tz = params.get("RECURRENCE-ID", {}).get("TZID")
+    recurrence_id: datetime | None = None
+    if rid_raw:
+        recurrence_id = _parse_ical_datetime(rid_raw, rid_tz)
+
+    if recurrence_id is not None and uid:
+        external_id: str | None = f"{uid}#{recurrence_id.isoformat()}"
+    else:
+        external_id = uid
+
+    exdates: list[str] = []
+    for raw_value, ex_params in exdate_lines:
+        ex_tz = ex_params.get("TZID")
+        for piece in raw_value.split(","):
+            piece = piece.strip()
+            if not piece:
+                continue
+            try:
+                dt = _parse_ical_datetime(piece, ex_tz)
+            except (ValueError, TypeError):
+                logger.warning("Skipping malformed EXDATE %r", piece)
+                continue
+            exdates.append(dt.isoformat())
+
     return {
-        "external_id": props.get("UID"),
+        "external_id": external_id,
+        "master_external_id": uid,
         "title": props.get("SUMMARY", "(No title)"),
         "description": props.get("DESCRIPTION"),
         "location": props.get("LOCATION"),
         "start_time": start_time,
         "end_time": end_time,
         "all_day": all_day,
-        "recurrence_rule": props.get("RRULE"),
+        "recurrence_rule": props.get("RRULE") if recurrence_id is None else None,
+        "recurrence_id": recurrence_id,
+        "exdates": ",".join(exdates) if exdates else None,
+        "start_tzid": start_tz,
         "is_private": props.get("CLASS", "").upper() == "PRIVATE",
     }
 

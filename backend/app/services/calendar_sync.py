@@ -168,6 +168,18 @@ async def _sync_ical(
     sub = ICalSubscription()
     event_dicts = await sub.fetch_and_parse(ical_url)
     result = await _upsert_events(db, source_calendar, event_dicts)
+    # Snapshot semantics for recurrence overrides: any local override row
+    # whose (master_uid, recurrence_id) is no longer present in the feed must
+    # be deleted, otherwise expansion will keep skipping a master occurrence
+    # that should have come back.
+    seen_overrides: set[tuple[str, datetime]] = {
+        (e["master_external_id"], e["recurrence_id"])
+        for e in event_dicts
+        if e.get("recurrence_id") is not None and e.get("master_external_id")
+    }
+    pruned = await _prune_stale_overrides(db, source_calendar, seen_overrides)
+    if pruned:
+        result["deleted"] = result.get("deleted", 0) + pruned
     return result
 
 
@@ -246,6 +258,34 @@ async def _upsert_events(
 
     await db.flush()
     return {"created": created, "updated": updated, "deleted": deleted}
+
+
+async def _prune_stale_overrides(
+    db: AsyncSession,
+    source_calendar: SourceCalendar,
+    seen: set[tuple[str, datetime]],
+) -> int:
+    """Delete override rows for this source calendar whose
+    (master_external_id, recurrence_id) is not in the latest feed.
+
+    This restores master occurrences whose modified-instance has been
+    reverted or deleted upstream; without it the expansion logic would
+    keep skipping that occurrence forever.
+    """
+    stmt = select(Event).where(
+        Event.source_calendar_id == source_calendar.id,
+        Event.recurrence_id.isnot(None),
+    )
+    result = await db.execute(stmt)
+    deleted = 0
+    for ev in result.scalars().all():
+        key = (ev.master_external_id or "", ev.recurrence_id)
+        if key not in seen:
+            await db.delete(ev)
+            deleted += 1
+    if deleted:
+        await db.flush()
+    return deleted
 
 
 # ── Bulk and push operations ─────────────────────────────────────────────────
