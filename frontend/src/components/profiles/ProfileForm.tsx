@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { profiles } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useAuthStore } from "@/stores/authStore";
 import type { Profile } from "@/types";
 
 const PRESET_COLORS = [
@@ -41,6 +42,8 @@ export default function ProfileForm({
   onSaved,
 }: ProfileFormProps) {
   const householdId = useHouseholdStore((s) => s.householdId)!;
+  const currentProfile = useAuthStore((s) => s.profile);
+  const isAdmin = currentProfile?.role === "admin";
   const queryClient = useQueryClient();
   const isEditing = !!profile;
 
@@ -85,10 +88,9 @@ export default function ProfileForm({
     e.preventDefault();
     const data: Partial<Profile> & { pin?: string } = {
       name: name.trim(),
-      role,
       color,
       avatar_url: avatarUrl.trim() || undefined,
-      is_active: isActive,
+      ...(isAdmin ? { role, is_active: isActive } : {}),
       ...(pin ? { pin } : {}),
     };
 
@@ -127,28 +129,30 @@ export default function ProfileForm({
             />
           </div>
 
-          {/* Role */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Role
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {ROLES.map((r) => (
-                <button
-                  key={r.value}
-                  type="button"
-                  onClick={() => setRole(r.value)}
-                  className={`rounded-xl py-3 px-4 text-sm font-medium min-h-[44px] transition-colors ${
-                    role === r.value
-                      ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
+          {/* Role (admin-only) */}
+          {isAdmin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Role
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {ROLES.map((r) => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => setRole(r.value)}
+                    className={`rounded-xl py-3 px-4 text-sm font-medium min-h-[44px] transition-colors ${
+                      role === r.value
+                        ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 ring-2 ring-blue-500"
+                        : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600"
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Color picker */}
           <div>
@@ -202,27 +206,29 @@ export default function ProfileForm({
             />
           </div>
 
-          {/* Active toggle */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Active
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsActive(!isActive)}
-              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors min-h-[44px] items-center ${
-                isActive ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
-              }`}
-              role="switch"
-              aria-checked={isActive}
-            >
-              <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                  isActive ? "translate-x-5" : "translate-x-0.5"
+          {/* Active toggle (admin-only) */}
+          {isAdmin && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Active
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsActive(!isActive)}
+                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors min-h-[44px] items-center ${
+                  isActive ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
                 }`}
-              />
-            </button>
-          </div>
+                role="switch"
+                aria-checked={isActive}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    isActive ? "translate-x-5" : "translate-x-0.5"
+                  }`}
+                />
+              </button>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center gap-3 pt-2">
@@ -242,7 +248,7 @@ export default function ProfileForm({
             </button>
           </div>
 
-          {isEditing && (
+          {isEditing && isAdmin && (
             <button
               type="button"
               onClick={() => deleteMutation.mutate()}

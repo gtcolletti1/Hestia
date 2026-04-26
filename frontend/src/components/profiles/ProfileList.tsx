@@ -2,12 +2,15 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { profiles as profilesApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useAuthStore } from "@/stores/authStore";
 import ProfileCard from "./ProfileCard";
 import ProfileForm from "./ProfileForm";
 import type { Profile } from "@/types";
 
 export default function ProfileList() {
   const householdId = useHouseholdStore((s) => s.householdId);
+  const currentProfile = useAuthStore((s) => s.profile);
+  const isAdmin = currentProfile?.role === "admin";
 
   const [formState, setFormState] = useState<{
     open: boolean;
@@ -37,23 +40,32 @@ export default function ProfileList() {
         <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
           Profiles
         </h2>
-        <button
-          onClick={() => setFormState({ open: true })}
-          className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 min-h-[44px] transition-colors"
-        >
-          + Add Profile
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setFormState({ open: true })}
+            className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-5 min-h-[44px] transition-colors"
+          >
+            + Add Profile
+          </button>
+        )}
       </div>
 
       {/* Active profiles */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-        {activeProfiles.map((profile) => (
-          <ProfileCard
-            key={profile.id}
-            profile={profile}
-            onClick={(p) => setFormState({ open: true, profile: p })}
-          />
-        ))}
+        {activeProfiles.map((profile) => {
+          const canEdit = isAdmin || profile.id === currentProfile?.id;
+          return (
+            <ProfileCard
+              key={profile.id}
+              profile={profile}
+              onClick={
+                canEdit
+                  ? (p) => setFormState({ open: true, profile: p })
+                  : undefined
+              }
+            />
+          );
+        })}
       </div>
 
       {/* Inactive profiles */}
@@ -63,13 +75,20 @@ export default function ProfileList() {
             Inactive
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 opacity-60">
-            {inactiveProfiles.map((profile) => (
-              <ProfileCard
-                key={profile.id}
-                profile={profile}
-                onClick={(p) => setFormState({ open: true, profile: p })}
-              />
-            ))}
+            {inactiveProfiles.map((profile) => {
+              const canEdit = isAdmin || profile.id === currentProfile?.id;
+              return (
+                <ProfileCard
+                  key={profile.id}
+                  profile={profile}
+                  onClick={
+                    canEdit
+                      ? (p) => setFormState({ open: true, profile: p })
+                      : undefined
+                  }
+                />
+              );
+            })}
           </div>
         </div>
       )}
