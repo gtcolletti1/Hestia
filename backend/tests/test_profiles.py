@@ -98,6 +98,8 @@ async def test_list_profiles(
     sample_household: Household,
     sample_profile: Profile,
 ) -> None:
+    """List endpoint is intentionally unauthenticated — needed pre-login
+    to render the profile selector tiles."""
     resp = await async_client.get(
         "/api/profiles", params={"household_id": str(sample_household.id)}
     )
@@ -110,13 +112,20 @@ async def test_list_profiles(
 
 
 async def test_get_profile(
-    async_client: AsyncClient, sample_profile: Profile
+    authed_client: AsyncClient, sample_profile: Profile
 ) -> None:
-    resp = await async_client.get(f"/api/profiles/{sample_profile.id}")
+    resp = await authed_client.get(f"/api/profiles/{sample_profile.id}")
     assert resp.status_code == 200
     body = resp.json()
     assert body["id"] == str(sample_profile.id)
     assert body["name"] == sample_profile.name
+
+
+async def test_get_profile_requires_auth(
+    async_client: AsyncClient, sample_profile: Profile
+) -> None:
+    resp = await async_client.get(f"/api/profiles/{sample_profile.id}")
+    assert resp.status_code == 401
 
 
 async def test_update_profile(
@@ -133,7 +142,7 @@ async def test_update_profile(
 
 
 async def test_delete_profile(
-    authed_client: AsyncClient, async_client: AsyncClient, sample_household: Household
+    authed_client: AsyncClient, sample_household: Household
 ) -> None:
     # Create a disposable profile via authed_client (non-bootstrap path), then delete it
     create_resp = await authed_client.post(
@@ -151,11 +160,11 @@ async def test_delete_profile(
     assert resp.status_code == 204
 
     # Confirm it's gone
-    get_resp = await async_client.get(f"/api/profiles/{profile_id}")
+    get_resp = await authed_client.get(f"/api/profiles/{profile_id}")
     assert get_resp.status_code == 404
 
 
-async def test_get_nonexistent_profile(async_client: AsyncClient) -> None:
+async def test_get_nonexistent_profile(authed_client: AsyncClient) -> None:
     fake_id = uuid.uuid4()
-    resp = await async_client.get(f"/api/profiles/{fake_id}")
+    resp = await authed_client.get(f"/api/profiles/{fake_id}")
     assert resp.status_code == 404

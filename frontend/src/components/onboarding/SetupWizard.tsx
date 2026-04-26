@@ -18,6 +18,8 @@ export default function SetupWizard() {
   const [householdId, setHouseholdId] = useState("");
   const [profileName, setProfileName] = useState("");
   const [profileColor, setProfileColor] = useState(PRESET_COLORS[8]);
+  const [pin, setPin] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,15 +34,38 @@ export default function SetupWizard() {
       const { data } = await households.create({ name: householdName.trim() });
       setHouseholdId(data.id);
       setStep(2);
-    } catch {
+    } catch (e: unknown) {
+      // 409 means another browser/tab already created the household between
+      // our discover() call and the create — back off and re-run discovery
+      // so the user lands on ProfileSelector instead of being stuck.
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        await store.discover();
+        return;
+      }
       setError("Failed to create household. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  const validatePin = (value: string): string | null => {
+    if (!/^\d+$/.test(value)) return "PIN must contain only digits.";
+    if (value.length < 4 || value.length > 12) return "PIN must be 4-12 digits.";
+    return null;
+  };
+
   const createProfile = async () => {
     if (!profileName.trim()) return;
+    const pinError = validatePin(pin);
+    if (pinError) {
+      setError(pinError);
+      return;
+    }
+    if (pin !== pinConfirm) {
+      setError("PINs do not match.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -49,11 +74,11 @@ export default function SetupWizard() {
         color: profileColor,
         role: "admin",
         household_id: householdId,
+        pin,
       });
-      // Auto-login with the new profile (no PIN needed on first setup)
       const { data: loginData } = await auth.login({
         profile_id: profile.id,
-        pin: "",
+        pin,
       });
       authStore.login(loginData.access_token, loginData.profile);
       setStep(3);
@@ -78,8 +103,7 @@ export default function SetupWizard() {
   };
 
   const finish = () => {
-    store.setHouseholdId(householdId);
-    store.setHouseholdName(householdName);
+    store.selectHousehold(householdId, householdName);
   };
 
   return (
@@ -181,9 +205,44 @@ export default function SetupWizard() {
                 ))}
               </div>
             </div>
+            <div className="space-y-2 text-left">
+              <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                Set a PIN (4-12 digits)
+              </p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">
+                Admins must use a PIN to sign in. You can change it later in
+                Settings.
+              </p>
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="new-password"
+                placeholder="PIN"
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 12))}
+                className="w-full rounded-xl border border-gray-300 px-4 py-4 text-lg tracking-[0.4em] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              />
+              <input
+                type="password"
+                inputMode="numeric"
+                autoComplete="new-password"
+                placeholder="Confirm PIN"
+                value={pinConfirm}
+                onChange={(e) =>
+                  setPinConfirm(e.target.value.replace(/\D/g, "").slice(0, 12))
+                }
+                onKeyDown={(e) => e.key === "Enter" && createProfile()}
+                className="w-full rounded-xl border border-gray-300 px-4 py-4 text-lg tracking-[0.4em] focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              />
+            </div>
             <button
               onClick={createProfile}
-              disabled={loading || !profileName.trim()}
+              disabled={
+                loading ||
+                !profileName.trim() ||
+                pin.length < 4 ||
+                pin !== pinConfirm
+              }
               className="w-full rounded-xl bg-blue-500 px-6 py-4 text-lg font-semibold text-white transition-colors hover:bg-blue-600 active:scale-[0.98] disabled:opacity-50"
             >
               {loading ? "Creating…" : "Create Profile"}

@@ -1,11 +1,11 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.auth import get_current_profile, get_optional_profile
+from app.api.auth import get_current_profile, get_optional_profile, pwd_context
 from app.database import get_db
 from app.models.user import Household, Profile, ProfileRole
 from app.schemas.profile import (
@@ -27,6 +27,14 @@ async def list_profiles(
     household_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
 ) -> list[Profile]:
+    """List the profiles for a household.
+
+    Intentionally **unauthenticated**: the profile selector screen runs
+    pre-login and needs this data to render the selectable tiles
+    (name, color, avatar, pin_set). The same household_id must already be
+    known to the caller (discovered via /setup/discover or stored in
+    localStorage), so this endpoint is not enumerable.
+    """
     result = await db.execute(
         select(Profile).where(Profile.household_id == household_id)
     )
@@ -37,10 +45,13 @@ async def list_profiles(
 async def get_profile(
     profile_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> Profile:
     profile = await db.get(Profile, profile_id)
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Profile not found")
+    if profile.household_id != current_profile.household_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     return profile
 
 
@@ -87,7 +98,11 @@ async def create_profile(
             detail="The first profile in a household must be an admin",
         )
 
-    profile = Profile(**data.model_dump())
+    payload = data.model_dump()
+    pin = payload.pop("pin", None)
+    profile = Profile(**payload)
+    if pin:
+        profile.pin_hash = pwd_context.hash(pin)
     db.add(profile)
     await db.flush()
     await db.refresh(profile)
@@ -197,27 +212,24 @@ async def delete_profile(
 async def create_household(
     data: HouseholdCreate,
     db: AsyncSession = Depends(get_db),
-    actor: Profile | None = Depends(get_optional_profile),
 ) -> Household:
-    """Create a new household.
+    """Create the household.
 
-    Permitted unauthenticated only when no households exist (initial install
-    bootstrap). Otherwise an authenticated admin is required.
+    This product is a single-household appliance: exactly one household
+    exists per install. The first POST creates it (no auth required, since
+    no profiles exist yet to authenticate against). Any subsequent attempt
+    is rejected with 409 CONFLICT — additional households would create the
+    "duplicate household per browser" bug we hit historically, and the UI
+    has no household-switching flow.
     """
     existing_count = (
         await db.execute(select(func.count(Household.id)))
     ).scalar_one()
     if existing_count > 0:
-        if actor is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication required",
-            )
-        if actor.role != ProfileRole.admin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only admins can create households",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A household already exists on this hub",
+        )
     household = Household(**data.model_dump())
     db.add(household)
     await db.flush()
@@ -229,7 +241,10 @@ async def create_household(
 async def get_household(
     household_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
 ) -> Household:
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     result = await db.execute(
         select(Household)
         .options(selectinload(Household.profiles))

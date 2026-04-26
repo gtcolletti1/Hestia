@@ -1,7 +1,7 @@
 import uuid
 import datetime as dt
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.user import ProfileRole
 
@@ -18,6 +18,19 @@ class ProfileBase(BaseModel):
 
 class ProfileCreate(ProfileBase):
     household_id: uuid.UUID
+    pin: str | None = Field(
+        default=None,
+        description="Optional PIN to set during creation (4-12 digits).",
+    )
+
+    @field_validator("pin")
+    @classmethod
+    def _validate_pin(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return None
+        if not (v.isdigit() and 4 <= len(v) <= 12):
+            raise ValueError("PIN must be 4-12 digits")
+        return v
 
 
 class ProfileUpdate(BaseModel):
@@ -57,3 +70,20 @@ class HouseholdResponse(HouseholdBase):
     created_at: dt.datetime
     updated_at: dt.datetime
     profiles: list[ProfileResponse] = []
+
+
+# ── Setup / discovery schemas ────────────────────────────────────────────────
+
+
+class HouseholdSummary(BaseModel):
+    """Minimal pre-login household info exposed by /api/setup/discover."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+
+
+class SetupDiscoverResponse(BaseModel):
+    setup_required: bool
+    households: list[HouseholdSummary]

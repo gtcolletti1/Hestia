@@ -5,6 +5,7 @@ import KioskWrapper from "@/components/layout/KioskWrapper";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import SetupWizard from "@/components/onboarding/SetupWizard";
 import ProfileSelector from "@/components/onboarding/ProfileSelector";
+import HouseholdPicker from "@/components/onboarding/HouseholdPicker";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -22,7 +23,18 @@ export default function App() {
   const householdId = useHouseholdStore((s) => s.householdId);
   const profiles = useHouseholdStore((s) => s.profiles);
   const fetchProfiles = useHouseholdStore((s) => s.fetchProfiles);
+  const bootStatus = useHouseholdStore((s) => s.bootStatus);
+  const discover = useHouseholdStore((s) => s.discover);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Single-household appliance: ask the server who exists before deciding
+  // whether to show the setup wizard, the household picker, or sign-in.
+  // Without this, a fresh browser would fall straight through to the
+  // wizard and create yet another duplicate household. discover() handles
+  // its own error reporting via bootStatus = "error".
+  useEffect(() => {
+    void discover();
+  }, [discover]);
 
   useEffect(() => {
     if (householdId && profiles.length === 0) {
@@ -30,11 +42,50 @@ export default function App() {
     }
   }, [householdId, profiles.length, fetchProfiles]);
 
-  // No household yet → show setup wizard
-  if (!householdId) {
+  if (bootStatus === "checking") {
+    return (
+      <KioskWrapper>
+        <LoadingSpinner message="Loading…" />
+      </KioskWrapper>
+    );
+  }
+
+  if (bootStatus === "error") {
+    return (
+      <KioskWrapper>
+        <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6 dark:bg-gray-900">
+          <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl dark:bg-gray-800">
+            <div className="text-5xl">⚠️</div>
+            <h1 className="mt-4 text-xl font-semibold text-gray-900 dark:text-gray-100">
+              Can&apos;t reach the hub
+            </h1>
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+              Check that the backend is running on this network and try again.
+            </p>
+            <button
+              onClick={() => void discover()}
+              className="mt-6 w-full rounded-xl bg-blue-500 px-6 py-4 text-lg font-semibold text-white transition-colors hover:bg-blue-600 active:scale-[0.98]"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </KioskWrapper>
+    );
+  }
+
+  if (bootStatus === "needs-setup") {
     return (
       <KioskWrapper>
         <SetupWizard />
+      </KioskWrapper>
+    );
+  }
+
+  if (bootStatus === "needs-pick") {
+    return (
+      <KioskWrapper>
+        <HouseholdPicker />
       </KioskWrapper>
     );
   }

@@ -26,6 +26,7 @@ export const profiles = {
     color: string;
     role: string;
     household_id: string;
+    pin?: string;
   }) => client.post<Profile>("/profiles", data),
 
   update: (id: string, data: Partial<Profile>) =>
@@ -44,6 +45,22 @@ export const households = {
     client.get<{ id: string; name: string; profiles: Profile[] }>(
       `/households/${householdId}`,
     ),
+};
+
+// --- Setup / discovery (unauthenticated, pre-login) ---
+
+export interface HouseholdSummary {
+  id: string;
+  name: string;
+}
+
+export interface SetupDiscoverResponse {
+  setup_required: boolean;
+  households: HouseholdSummary[];
+}
+
+export const setup = {
+  discover: () => client.get<SetupDiscoverResponse>("/setup/discover"),
 };
 
 // --- Events ---
