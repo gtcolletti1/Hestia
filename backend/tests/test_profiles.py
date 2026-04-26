@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 
-from app.models.user import Household, Profile
+from app.models.user import Household, Profile, ProfileRole
 
 pytestmark = pytest.mark.asyncio
 
@@ -29,7 +29,7 @@ async def test_create_household(async_client: AsyncClient) -> None:
 
 
 async def test_create_profile(
-    async_client: AsyncClient, sample_household: Household
+    authed_client: AsyncClient, sample_household: Household, sample_profile: Profile
 ) -> None:
     payload = {
         "name": "Jane",
@@ -37,13 +37,60 @@ async def test_create_profile(
         "role": "standard",
         "household_id": str(sample_household.id),
     }
-    resp = await async_client.post("/api/profiles", json=payload)
+    resp = await authed_client.post("/api/profiles", json=payload)
     assert resp.status_code == 201
     body = resp.json()
     assert body["name"] == "Jane"
     assert body["color"] == "#00FF00"
     assert body["household_id"] == str(sample_household.id)
     assert body["is_active"] is True
+
+
+async def test_create_first_profile_bootstrap_admin(
+    async_client: AsyncClient, db_session,
+) -> None:
+    """The very first profile in an empty household may be created without auth,
+    but must be an admin (the bootstrap path used by the setup wizard)."""
+    household = Household(name="Bootstrap Family")
+    db_session.add(household)
+    await db_session.flush()
+    await db_session.refresh(household)
+
+    # Standard role on bootstrap is rejected
+    bad = await async_client.post(
+        "/api/profiles",
+        json={
+            "name": "NotAdmin",
+            "color": "#123456",
+            "role": "standard",
+            "household_id": str(household.id),
+        },
+    )
+    assert bad.status_code == 400
+
+    # Admin role on bootstrap succeeds
+    good = await async_client.post(
+        "/api/profiles",
+        json={
+            "name": "FirstAdmin",
+            "color": "#123456",
+            "role": "admin",
+            "household_id": str(household.id),
+        },
+    )
+    assert good.status_code == 201
+
+    # Subsequent unauth POST is now blocked
+    blocked = await async_client.post(
+        "/api/profiles",
+        json={
+            "name": "Second",
+            "color": "#654321",
+            "role": "standard",
+            "household_id": str(household.id),
+        },
+    )
+    assert blocked.status_code == 401
 
 
 async def test_list_profiles(
@@ -88,8 +135,8 @@ async def test_update_profile(
 async def test_delete_profile(
     authed_client: AsyncClient, async_client: AsyncClient, sample_household: Household
 ) -> None:
-    # Create a disposable profile (POST is unauthenticated), then delete it
-    create_resp = await async_client.post(
+    # Create a disposable profile via authed_client (non-bootstrap path), then delete it
+    create_resp = await authed_client.post(
         "/api/profiles",
         json={
             "name": "ToDelete",
@@ -97,6 +144,7 @@ async def test_delete_profile(
             "household_id": str(sample_household.id),
         },
     )
+    assert create_resp.status_code == 201
     profile_id = create_resp.json()["id"]
 
     resp = await authed_client.delete(f"/api/profiles/{profile_id}")

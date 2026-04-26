@@ -34,6 +34,7 @@ class ProfileResponse(ProfileBase):
     id: uuid.UUID
     household_id: uuid.UUID
     is_active: bool
+    pin_set: bool = False
     created_at: dt.datetime
     updated_at: dt.datetime
 

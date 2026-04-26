@@ -45,6 +45,7 @@ class ProfileOut(BaseModel):
     color: str
     avatar_url: str | None = None
     household_id: str
+    pin_set: bool = False
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -67,6 +68,7 @@ def _profile_to_dict(profile: Profile) -> dict:
         "color": profile.color,
         "avatar_url": profile.avatar_url,
         "household_id": str(profile.household_id),
+        "pin_set": profile.pin_hash is not None,
     }
 
 
@@ -124,12 +126,52 @@ async def require_admin(
     return profile
 
 
+_optional_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+async def get_optional_profile(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Profile | None:
+    """Return the authenticated Profile if a valid token is present, else None.
+
+    Used by endpoints that allow unauthenticated bootstrap calls (e.g. the
+    very first household / admin creation) but otherwise require an
+    authenticated admin actor.
+    """
+    if credentials is None:
+        return None
+    try:
+        payload = jwt.decode(
+            credentials.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        profile_id = payload.get("sub")
+        if not profile_id:
+            return None
+    except JWTError:
+        return None
+    result = await db.execute(select(Profile).where(Profile.id == _uuid.UUID(profile_id)))
+    profile = result.scalar_one_or_none()
+    if profile is None or not profile.is_active:
+        return None
+    return profile
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """Authenticate with profile_id + PIN, return a JWT."""
+    """Authenticate with profile_id + PIN, return a JWT.
+
+    Admin profiles **must** have a PIN configured. PIN-less admin login
+    is rejected with 423 LOCKED to prevent privilege escalation. Non-admin
+    profiles still allow PIN-less login (if no PIN is set).
+
+    Recovery: if every admin in a household has somehow ended up without
+    a PIN, use ``python -m app.scripts.set_admin_pin`` from the backend
+    container to set one directly.
+    """
     result = await db.execute(select(Profile).where(Profile.id == _uuid.UUID(body.profile_id)))
     profile = result.scalar_one_or_none()
 
@@ -139,8 +181,19 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="Invalid profile or PIN",
         )
 
+    if profile.role == ProfileRole.admin and not profile.pin_hash:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=(
+                "Admin profiles require a PIN. Sign in as another admin "
+                "and set this account's PIN via Settings, or run "
+                "'python -m app.scripts.set_admin_pin' from the backend "
+                "container if no admin can sign in."
+            ),
+        )
+
     if not profile.pin_hash:
-        # No PIN set — allow passwordless login (first-time / family hub mode)
+        # Non-admin with no PIN — passwordless login allowed
         pass
     elif not pwd_context.verify(body.pin, profile.pin_hash):
         raise HTTPException(
@@ -194,4 +247,5 @@ async def get_me(profile: Profile = Depends(get_current_profile)):
         color=profile.color,
         avatar_url=profile.avatar_url,
         household_id=str(profile.household_id),
+        pin_set=profile.pin_hash is not None,
     )

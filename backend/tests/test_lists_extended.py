@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import pytest
 from httpx import AsyncClient
+from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import Household, Profile, ProfileRole
 
 pytestmark = pytest.mark.asyncio
+
+_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -101,6 +104,7 @@ async def _setup_two_households(
         name="User A",
         color="#AA0000",
         role=ProfileRole.admin,
+        pin_hash=_pwd.hash("1234"),
         is_active=True,
     )
     db_session.add(profile_a)
@@ -116,6 +120,7 @@ async def _setup_two_households(
         name="User B",
         color="#0000BB",
         role=ProfileRole.admin,
+        pin_hash=_pwd.hash("5678"),
         is_active=True,
     )
     db_session.add(profile_b)
@@ -124,7 +129,7 @@ async def _setup_two_households(
     # Login as profile A to create a list + item
     login_a = await async_client.post(
         "/api/auth/login",
-        json={"profile_id": str(profile_a.id), "pin": ""},
+        json={"profile_id": str(profile_a.id), "pin": "1234"},
     )
     token_a = login_a.json()["access_token"]
     headers_a = {"Authorization": f"Bearer {token_a}"}
@@ -152,7 +157,7 @@ async def _setup_two_households(
     # Login as profile B
     login_b = await async_client.post(
         "/api/auth/login",
-        json={"profile_id": str(profile_b.id), "pin": ""},
+        json={"profile_id": str(profile_b.id), "pin": "5678"},
     )
     token_b = login_b.json()["access_token"]
     headers_b = {"Authorization": f"Bearer {token_b}"}

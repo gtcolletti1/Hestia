@@ -72,3 +72,7 @@ class Profile(Base):
 
     def __repr__(self) -> str:
         return f"<Profile id={self.id} name={self.name!r} role={self.role.value}>"
+
+    @property
+    def pin_set(self) -> bool:
+        return self.pin_hash is not None

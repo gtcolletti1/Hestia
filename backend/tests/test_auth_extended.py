@@ -5,11 +5,14 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from passlib.context import CryptContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import Household, Profile, ProfileRole
 
 pytestmark = pytest.mark.asyncio
+
+_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # ── Tests ────────────────────────────────────────────────────────────────────
@@ -74,6 +77,32 @@ async def test_login_inactive_profile(
     assert resp.status_code == 401
 
 
+async def test_admin_login_without_pin_locked(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    sample_household: Household,
+) -> None:
+    """Admin profiles without a PIN cannot log in (423 LOCKED)."""
+    profile = Profile(
+        household_id=sample_household.id,
+        name="PinlessAdmin",
+        color="#445566",
+        role=ProfileRole.admin,
+        pin_hash=None,
+        is_active=True,
+    )
+    db_session.add(profile)
+    await db_session.flush()
+    await db_session.refresh(profile)
+
+    resp = await async_client.post(
+        "/api/auth/login",
+        json={"profile_id": str(profile.id), "pin": ""},
+    )
+    assert resp.status_code == 423
+    assert "PIN" in resp.json()["detail"]
+
+
 async def test_cross_household_dashboard(
     async_client: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -88,6 +117,7 @@ async def test_cross_household_dashboard(
         name="User A",
         color="#000000",
         role=ProfileRole.admin,
+        pin_hash=_pwd.hash("1234"),
         is_active=True,
     )
     db_session.add(profile_a)
@@ -101,7 +131,7 @@ async def test_cross_household_dashboard(
     # Login as profile A
     login_resp = await async_client.post(
         "/api/auth/login",
-        json={"profile_id": str(profile_a.id), "pin": ""},
+        json={"profile_id": str(profile_a.id), "pin": "1234"},
     )
     assert login_resp.status_code == 200
     token = login_resp.json()["access_token"]
