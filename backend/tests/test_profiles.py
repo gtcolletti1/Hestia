@@ -141,6 +141,56 @@ async def test_update_profile(
     assert body["color"] == "#000000"
 
 
+async def test_update_profile_pin_is_hashed_and_authenticates(
+    authed_client: AsyncClient, async_client: AsyncClient, sample_profile: Profile, db_session
+) -> None:
+    """Regression: PUT /profiles must hash a new pin into pin_hash so the
+    user can subsequently log in with it. Previously the schema dropped the
+    field silently and the handler did setattr(profile, 'pin', ...)."""
+    new_pin = "9911"
+    resp = await authed_client.put(
+        f"/api/profiles/{sample_profile.id}",
+        json={"pin": new_pin},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["pin_set"] is True
+
+    # Login with the new PIN should succeed
+    login = await async_client.post(
+        "/api/auth/login",
+        json={"profile_id": str(sample_profile.id), "pin": new_pin},
+    )
+    assert login.status_code == 200, login.text
+
+    # Login with a wrong PIN should fail (proves the new value really took)
+    bad = await async_client.post(
+        "/api/auth/login",
+        json={"profile_id": str(sample_profile.id), "pin": "0000"},
+    )
+    assert bad.status_code == 401
+
+
+async def test_update_profile_empty_pin_clears_it(
+    authed_client: AsyncClient, sample_profile: Profile, db_session
+) -> None:
+    resp = await authed_client.put(
+        f"/api/profiles/{sample_profile.id}",
+        json={"pin": ""},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["pin_set"] is False
+
+
+async def test_update_profile_invalid_pin_rejected(
+    authed_client: AsyncClient, sample_profile: Profile
+) -> None:
+    resp = await authed_client.put(
+        f"/api/profiles/{sample_profile.id}",
+        json={"pin": "12"},
+    )
+    assert resp.status_code == 422
+
+
 async def test_delete_profile(
     authed_client: AsyncClient, sample_household: Household
 ) -> None:

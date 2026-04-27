@@ -39,6 +39,21 @@ class ProfileUpdate(BaseModel):
     avatar_url: str | None = None
     role: ProfileRole | None = None
     is_active: bool | None = None
+    pin: str | None = Field(
+        default=None,
+        description="New PIN (4-12 digits). Empty string clears the PIN.",
+    )
+
+    @field_validator("pin")
+    @classmethod
+    def _validate_pin(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if v == "":
+            return ""
+        if not (v.isdigit() and 4 <= len(v) <= 12):
+            raise ValueError("PIN must be 4-12 digits")
+        return v
 
 
 class ProfileResponse(ProfileBase):

@@ -131,6 +131,9 @@ async def update_profile(
         )
 
     updates = data.model_dump(exclude_unset=True)
+    # PIN is stored hashed in pin_hash, never as a plain column. Strip it
+    # out of the generic setattr loop and apply it explicitly below.
+    pin = updates.pop("pin", None)
     # Privilege guards: only admins may change role or activation status,
     # and an admin may not demote the only remaining admin in the household.
     if "role" in updates and not is_admin:
@@ -164,6 +167,10 @@ async def update_profile(
 
     for field, value in updates.items():
         setattr(profile, field, value)
+
+    if pin is not None:
+        # Empty string explicitly clears the PIN; a non-empty value is hashed.
+        profile.pin_hash = pwd_context.hash(pin) if pin else None
 
     await db.flush()
     await db.refresh(profile)
