@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query";
 import { admin } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useAuthStore } from "@/stores/authStore";
 import ScreensaverOverlay from "./ScreensaverOverlay";
 
 interface KioskWrapperProps {
@@ -40,10 +41,16 @@ export default function KioskWrapper({ children }: KioskWrapperProps) {
       if (el) el.style.cursor = "none";
     }, CURSOR_HIDE_MS);
 
-    // Screensaver: activate after configured idle time
+    // Screensaver: activate after configured idle time, and log out the
+    // current profile so dismissal returns to the profile selector. The
+    // top-level KioskWrapper does not unmount on auth changes, so the
+    // overlay remains visible until the user touches the screen.
     clearTimeout(screensaverTimerRef.current);
     screensaverTimerRef.current = setTimeout(() => {
       setScreensaverActive(true);
+      if (useAuthStore.getState().isAuthenticated) {
+        useAuthStore.getState().logout();
+      }
     }, timeoutMs);
   }, [timeoutMs]);
 

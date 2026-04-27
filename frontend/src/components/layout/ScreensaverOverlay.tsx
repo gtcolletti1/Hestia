@@ -68,14 +68,26 @@ export default function ScreensaverOverlay({ onDismiss, transitionSeconds = 10 }
       role="button"
       aria-label="Dismiss screensaver"
     >
-      {/* Background photo with crossfade */}
-      {currentPhoto && (
+      {/* Background photo with crossfade — falls back to the Hestia splash
+          image when the household has not added any photos yet. */}
+      {currentPhoto ? (
         <img
           key={currentPhoto.id}
           src={currentPhoto.url}
           alt={currentPhoto.caption ?? "Family photo"}
           className="absolute inset-0 w-full h-full object-cover animate-fade-in opacity-60"
           draggable={false}
+        />
+      ) : (
+        <img
+          src="/hestia-splash.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 w-full h-full object-cover opacity-80"
+          draggable={false}
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
         />
       )}
 
@@ -97,13 +109,6 @@ export default function ScreensaverOverlay({ onDismiss, transitionSeconds = 10 }
           </p>
         )}
       </div>
-
-      {/* No photos hint */}
-      {photoList.length === 0 && (
-        <div className="absolute bottom-8 text-white/40 text-sm">
-          Add photos in Settings to display here
-        </div>
-      )}
 
       {/* Photo counter */}
       {photoList.length > 1 && (

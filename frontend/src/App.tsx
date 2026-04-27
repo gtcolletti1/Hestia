@@ -42,17 +42,13 @@ export default function App() {
     }
   }, [householdId, profiles.length, fetchProfiles]);
 
-  if (bootStatus === "checking") {
-    return (
-      <KioskWrapper>
-        <LoadingSpinner message="Loading…" />
-      </KioskWrapper>
-    );
-  }
+  const renderContent = () => {
+    if (bootStatus === "checking") {
+      return <LoadingSpinner message="Loading…" />;
+    }
 
-  if (bootStatus === "error") {
-    return (
-      <KioskWrapper>
+    if (bootStatus === "error") {
+      return (
         <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6 dark:bg-gray-900">
           <div className="w-full max-w-md rounded-2xl bg-white p-8 text-center shadow-xl dark:bg-gray-800">
             <div className="text-5xl">⚠️</div>
@@ -70,37 +66,22 @@ export default function App() {
             </button>
           </div>
         </div>
-      </KioskWrapper>
-    );
-  }
+      );
+    }
 
-  if (bootStatus === "needs-setup") {
+    if (bootStatus === "needs-setup") {
+      return <SetupWizard />;
+    }
+
+    if (bootStatus === "needs-pick") {
+      return <HouseholdPicker />;
+    }
+
+    if (!isAuthenticated) {
+      return <ProfileSelector />;
+    }
+
     return (
-      <KioskWrapper>
-        <SetupWizard />
-      </KioskWrapper>
-    );
-  }
-
-  if (bootStatus === "needs-pick") {
-    return (
-      <KioskWrapper>
-        <HouseholdPicker />
-      </KioskWrapper>
-    );
-  }
-
-  // Household exists but not logged in → show profile selector
-  if (!isAuthenticated) {
-    return (
-      <KioskWrapper>
-        <ProfileSelector />
-      </KioskWrapper>
-    );
-  }
-
-  return (
-    <KioskWrapper>
       <Suspense fallback={<LoadingSpinner message="Loading…" />}>
         <Routes>
           <Route element={<AppShell />}>
@@ -116,6 +97,11 @@ export default function App() {
           </Route>
         </Routes>
       </Suspense>
-    </KioskWrapper>
-  );
+    );
+  };
+
+  // Single top-level KioskWrapper so the screensaver overlay (and its
+  // auto-logout side effect) survives the re-renders triggered by login,
+  // logout, and boot-state transitions.
+  return <KioskWrapper>{renderContent()}</KioskWrapper>;
 }
