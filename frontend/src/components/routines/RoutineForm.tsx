@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { routines as routinesApi, profiles as profilesApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import EmojiPicker from "@/components/shared/EmojiPicker";
 import type { Routine } from "@/types";
 
 /** Convert "HH:MM" or "HH:MM:SS" (24h) → { hour12, minute, period } */
@@ -383,13 +384,11 @@ export default function RoutineForm({ routine, onClose, onSaved, onDeleted }: Pr
               </div>
 
               {/* Icon */}
-              <input
-                type="text"
+              <EmojiPicker
                 value={step.icon}
-                onChange={(e) => updateStep(step.key, "icon", e.target.value)}
+                onChange={(v) => updateStep(step.key, "icon", v)}
                 placeholder="🪥"
-                className="touch-target w-14 rounded-lg border border-gray-300 text-center text-lg dark:border-gray-600 dark:bg-gray-800"
-                maxLength={4}
+                ariaLabel={`Icon for step ${index + 1}`}
               />
 
               {/* Label */}
