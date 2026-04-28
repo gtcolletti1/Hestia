@@ -67,10 +67,23 @@ export default function ProfileSelector() {
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-6 dark:bg-gray-900">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-xl dark:bg-gray-800 text-center space-y-6">
           <div
-            className="mx-auto flex h-20 w-20 items-center justify-center rounded-full text-3xl font-bold text-white"
+            className="mx-auto h-20 w-20 overflow-hidden rounded-full"
             style={{ backgroundColor: selectedProfile.color }}
           >
-            {selectedProfile.name[0]}
+            {selectedProfile.avatar_url ? (
+              <img
+                src={selectedProfile.avatar_url}
+                alt={selectedProfile.name}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-white">
+                {selectedProfile.name[0]}
+              </div>
+            )}
           </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
             Enter PIN for {selectedProfile.name}
@@ -142,10 +155,23 @@ export default function ProfileSelector() {
               className="flex flex-col items-center gap-2 rounded-xl border border-gray-200 p-6 transition-all hover:border-blue-400 hover:shadow-md active:scale-95 disabled:opacity-50 dark:border-gray-600 dark:hover:border-blue-500"
             >
               <div
-                className="flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold text-white"
+                className="h-16 w-16 overflow-hidden rounded-full"
                 style={{ backgroundColor: profile.color }}
               >
-                {profile.name[0]}
+                {profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.name}
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = "none";
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-white">
+                    {profile.name[0]}
+                  </div>
+                )}
               </div>
               <span className="text-lg font-medium text-gray-900 dark:text-gray-100">
                 {profile.name}
