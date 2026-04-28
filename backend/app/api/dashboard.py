@@ -16,7 +16,7 @@ from app.models.list import ListItem, TaskList
 from app.models.meal import MealPlan
 from app.models.routine import Routine
 from sqlalchemy.orm import selectinload
-from app.models.user import Profile
+from app.models.user import Household, Profile
 from app.schemas.dashboard import (
     ActiveListSummary,
     AgendaBucket,
@@ -45,17 +45,30 @@ async def get_dashboard(
     if current_profile.household_id != household_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Resolve the household's display timezone. The browser sends its IANA
-    # zone via the `tz` query param so "today's agenda" matches the wall
-    # clock the user sees, regardless of where the backend is hosted.
-    local_tz: ZoneInfo | timezone
+    # Resolve the household's display timezone. Priority order:
+    #   1. The household's stored 'timezone' setting (admin-configurable),
+    #   2. the optional `tz` query param the browser sends as a fallback
+    #      auto-detect, and finally
+    #   3. UTC. We log when we fall through so a misconfigured deployment
+    #      surfaces in the backend log instead of a wrong-bucket UI.
+    household = (
+        await db.execute(select(Household).where(Household.id == household_id))
+    ).scalar_one_or_none()
+    candidate_zones: list[str] = []
+    if household and isinstance(household.settings, dict):
+        stored = household.settings.get("timezone")
+        if stored:
+            candidate_zones.append(stored)
     if tz:
+        candidate_zones.append(tz)
+
+    local_tz: ZoneInfo | timezone = timezone.utc
+    for zone_name in candidate_zones:
         try:
-            local_tz = ZoneInfo(tz)
+            local_tz = ZoneInfo(zone_name)
+            break
         except (ZoneInfoNotFoundError, ValueError):
-            local_tz = timezone.utc
-    else:
-        local_tz = timezone.utc
+            continue
 
     now_local = datetime.now(tz=local_tz)
     today = now_local.date()

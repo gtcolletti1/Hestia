@@ -25,6 +25,7 @@ class HouseholdSettings(BaseModel):
     modules_enabled: ModulesEnabled = ModulesEnabled()
     privacy_mode: bool = False
     time_format: Literal["12h", "24h"] = "12h"
+    timezone: str = "UTC"  # IANA name, e.g. "America/New_York"
     weather_lat: float | None = None
     weather_lon: float | None = None
     weather_units: str = "imperial"  # "imperial" | "metric"
@@ -39,6 +40,7 @@ class HouseholdSettingsUpdate(BaseModel):
     modules_enabled: ModulesEnabled | None = None
     privacy_mode: bool | None = None
     time_format: Literal["12h", "24h"] | None = None
+    timezone: str | None = None
     weather_lat: float | None = None
     weather_lon: float | None = None
     weather_units: str | None = None

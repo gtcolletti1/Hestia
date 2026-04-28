@@ -21,6 +21,7 @@ interface HouseholdSettings {
   };
   privacy_mode: boolean;
   time_format: "12h" | "24h";
+  timezone: string;
   weather_lat: number | null;
   weather_lon: number | null;
   weather_units: string;
@@ -54,6 +55,9 @@ const DEFAULT_SETTINGS: HouseholdSettings = {
   },
   privacy_mode: false,
   time_format: "12h",
+  timezone:
+    (typeof Intl !== "undefined" && Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+    "UTC",
   weather_lat: null,
   weather_lon: null,
   weather_units: "imperial",
@@ -499,6 +503,48 @@ export default function SettingsPanel() {
               }`}
             />
           </button>
+        </div>
+
+        {/* Timezone */}
+        <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-6">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Timezone
+          </label>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            Used to bucket the dashboard agenda into Morning / Afternoon /
+            Evening for your local wall clock. Use an IANA name (e.g.
+            <code className="mx-1 rounded bg-gray-100 px-1 dark:bg-gray-700">America/New_York</code>).
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={form.timezone}
+              onChange={(e) => setForm({ ...form, timezone: e.target.value })}
+              onBlur={() => {
+                if (isAdmin) saveMutation.mutate(form);
+              }}
+              placeholder="America/New_York"
+              className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-3 text-base text-gray-900 dark:text-gray-100 min-h-[44px]"
+              disabled={!isAdmin}
+            />
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  const detected =
+                    (typeof Intl !== "undefined" &&
+                      Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+                    "UTC";
+                  const updated = { ...form, timezone: detected };
+                  setForm(updated);
+                  saveMutation.mutate(updated);
+                }}
+                className="rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 min-h-[44px]"
+              >
+                Use this device
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
