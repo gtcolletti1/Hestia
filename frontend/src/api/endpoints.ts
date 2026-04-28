@@ -229,10 +229,18 @@ export const meals = {
 
 // --- Dashboard ---
 
+// Resolve the browser's IANA timezone once at module load. The dashboard
+// uses this to compute "today's agenda" against the user's wall clock,
+// not the backend container's UTC clock.
+const browserTz =
+  typeof Intl !== "undefined"
+    ? Intl.DateTimeFormat().resolvedOptions().timeZone
+    : undefined;
+
 export const dashboard = {
   get: (householdId: string) =>
     client.get<DashboardData>("/dashboard", {
-      params: { household_id: householdId },
+      params: { household_id: householdId, ...(browserTz ? { tz: browserTz } : {}) },
     }),
 };
 

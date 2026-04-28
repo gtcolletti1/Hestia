@@ -3,6 +3,7 @@
 
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -30,13 +31,34 @@ router = APIRouter(tags=["dashboard"])
 @router.get("/dashboard", response_model=DashboardResponse)
 async def get_dashboard(
     household_id: uuid.UUID = Query(...),
+    tz: str | None = Query(
+        None,
+        description=(
+            "IANA timezone name (e.g. 'America/New_York') used to compute "
+            "'today' for the agenda. Falls back to UTC if missing or invalid."
+        ),
+    ),
     db: AsyncSession = Depends(get_db),
     current_profile: Profile = Depends(get_current_profile),
 ) -> DashboardResponse:
     """Composite read-only dashboard endpoint."""
     if current_profile.household_id != household_id:
         raise HTTPException(status_code=403, detail="Access denied")
-    today = date.today()
+
+    # Resolve the household's display timezone. The browser sends its IANA
+    # zone via the `tz` query param so "today's agenda" matches the wall
+    # clock the user sees, regardless of where the backend is hosted.
+    local_tz: ZoneInfo | timezone
+    if tz:
+        try:
+            local_tz = ZoneInfo(tz)
+        except (ZoneInfoNotFoundError, ValueError):
+            local_tz = timezone.utc
+    else:
+        local_tz = timezone.utc
+
+    now_local = datetime.now(tz=local_tz)
+    today = now_local.date()
     now = datetime.now(tz=timezone.utc)
     current_weekday = today.weekday()  # Monday = 0
 
@@ -52,8 +74,13 @@ async def get_dashboard(
     ]
 
     # ── Today's events ───────────────────────────────────────────────────
-    day_start = datetime.combine(today, time.min, tzinfo=timezone.utc)
-    day_end = datetime.combine(today + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    # Build the day window in the household's local zone, then convert to
+    # UTC for the SQL filter. Events stored in UTC will be matched only if
+    # they actually fall on the local "today".
+    day_start_local = datetime.combine(today, time.min, tzinfo=local_tz)
+    day_end_local = day_start_local + timedelta(days=1)
+    day_start = day_start_local.astimezone(timezone.utc)
+    day_end = day_end_local.astimezone(timezone.utc)
 
     events_stmt = (
         select(Event, Profile.name.label("profile_name"))
@@ -62,7 +89,7 @@ async def get_dashboard(
         .where(
             SourceCalendar.household_id == household_id,
             Event.start_time < day_end,
-            Event.end_time >= day_start,
+            Event.end_time > day_start,
         )
         .order_by(Event.start_time)
     )
@@ -86,7 +113,12 @@ async def get_dashboard(
             profile_name=profile_name,
             location=event.location,
         )
-        event_local_time = event.start_time.time()
+        # Bucket using the event's local time in the household's zone, not
+        # UTC — otherwise a 7pm-EDT event (23:00 UTC) lands in "morning".
+        start_aware = event.start_time
+        if start_aware.tzinfo is None:
+            start_aware = start_aware.replace(tzinfo=timezone.utc)
+        event_local_time = start_aware.astimezone(local_tz).time()
         if event_local_time < noon:
             morning_events.append(summary)
         elif event_local_time < five_pm:
