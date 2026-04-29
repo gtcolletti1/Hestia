@@ -5,6 +5,7 @@ import type {
   Routine,
   RoutineStep,
   RoutineCompletion,
+  RoutineTemplate,
   TaskList,
   ListItem,
   MealPlan,
@@ -159,6 +160,8 @@ export const routines = {
     client.get<Routine[]>("/routines/active", {
       params: { household_id: householdId, ...params },
     }),
+
+  getTemplates: () => client.get<RoutineTemplate[]>("/routines/templates"),
 };
 
 // --- Lists ---

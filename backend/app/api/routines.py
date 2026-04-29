@@ -15,9 +15,11 @@ from app.schemas.routine import (
     RoutineCompletionResponse,
     RoutineCreate,
     RoutineResponse,
+    RoutineTemplateResponse,
     RoutineUpdate,
     StreakInfo,
 )
+from app.data.routine_templates import ROUTINE_TEMPLATES
 
 router = APIRouter(tags=["routines"])
 
@@ -99,6 +101,20 @@ async def get_active_routines(
 
 
 # ── Get routine ──────────────────────────────────────────────────────────────
+
+
+@router.get("/routines/templates", response_model=list[RoutineTemplateResponse])
+async def list_routine_templates(
+    current_profile: Profile = Depends(get_current_profile),
+) -> list[dict]:
+    """Return the curated list of pre-built routine templates.
+
+    Templates are static suggestions; the frontend uses one to pre-fill
+    the New Routine form, then saves via the normal POST /routines path.
+    Auth is required to keep the API surface uniform with the rest of
+    the routines namespace.
+    """
+    return ROUTINE_TEMPLATES
 
 
 @router.get("/routines/{routine_id}", response_model=RoutineResponse)

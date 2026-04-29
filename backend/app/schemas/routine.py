@@ -98,3 +98,22 @@ class StreakInfo(BaseModel):
     current_streak: int
     longest_streak: int
     total_completions: int
+
+
+# ── Templates ────────────────────────────────────────────────────────────────
+
+
+class RoutineTemplateStep(BaseModel):
+    label: str
+    icon: str | None = None
+    points_value: int = 0
+
+
+class RoutineTemplateResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+    icon: str
+    time_block: TimeBlock
+    days_of_week: list[int]
+    steps: list[RoutineTemplateStep]

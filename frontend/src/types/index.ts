@@ -52,6 +52,22 @@ export interface RoutineCompletion {
   is_fully_completed: boolean;
 }
 
+export interface RoutineTemplateStep {
+  label: string;
+  icon?: string;
+  points_value: number;
+}
+
+export interface RoutineTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  time_block: Routine["time_block"];
+  days_of_week: number[];
+  steps: RoutineTemplateStep[];
+}
+
 export interface TaskList {
   id: string;
   name: string;

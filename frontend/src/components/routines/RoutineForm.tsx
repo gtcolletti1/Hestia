@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { routines as routinesApi, profiles as profilesApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import EmojiPicker from "@/components/shared/EmojiPicker";
-import type { Routine } from "@/types";
+import type { Routine, RoutineTemplate } from "@/types";
 
 /** Convert "HH:MM" or "HH:MM:SS" (24h) → { hour12, minute, period } */
 function parse24(value: string): { hour12: number; minute: number; period: "AM" | "PM" } {
@@ -131,9 +131,11 @@ const DAYS = ["M", "T", "W", "T", "F", "S", "S"] as const;
 
 interface Props {
   routine?: Routine;
+  template?: RoutineTemplate;
   onClose: () => void;
   onSaved: () => void;
   onDeleted?: () => void;
+  onBack?: () => void;
 }
 
 let stepKeyCounter = 0;
@@ -141,28 +143,46 @@ function newStepKey() {
   return `step-${++stepKeyCounter}-${Date.now()}`;
 }
 
-export default function RoutineForm({ routine, onClose, onSaved, onDeleted }: Props) {
+export default function RoutineForm({
+  routine,
+  template,
+  onClose,
+  onSaved,
+  onDeleted,
+  onBack,
+}: Props) {
   const queryClient = useQueryClient();
   const householdId = useHouseholdStore((s) => s.householdId);
   const isEditing = !!routine;
 
-  const [name, setName] = useState(routine?.name ?? "");
+  const [name, setName] = useState(routine?.name ?? template?.name ?? "");
   const [timeBlock, setTimeBlock] = useState<TimeBlock>(
-    routine?.time_block ?? "morning",
+    routine?.time_block ?? template?.time_block ?? "morning",
   );
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(
-    routine?.days_of_week ?? [0, 1, 2, 3, 4, 5, 6],
+    routine?.days_of_week ?? template?.days_of_week ?? [0, 1, 2, 3, 4, 5, 6],
   );
   const [startTime, setStartTime] = useState(routine?.start_time ?? "");
   const [profileId, setProfileId] = useState(routine?.profile_id ?? "");
-  const [steps, setSteps] = useState<StepInput[]>(
-    routine?.steps.map((s) => ({
-      key: s.id,
-      label: s.label,
-      icon: s.icon ?? "",
-      points_value: s.points_value ?? 0,
-    })) ?? [{ key: newStepKey(), label: "", icon: "", points_value: 0 }],
-  );
+  const [steps, setSteps] = useState<StepInput[]>(() => {
+    if (routine) {
+      return routine.steps.map((s) => ({
+        key: s.id,
+        label: s.label,
+        icon: s.icon ?? "",
+        points_value: s.points_value ?? 0,
+      }));
+    }
+    if (template) {
+      return template.steps.map((s) => ({
+        key: newStepKey(),
+        label: s.label,
+        icon: s.icon ?? "",
+        points_value: s.points_value ?? 0,
+      }));
+    }
+    return [{ key: newStepKey(), label: "", icon: "", points_value: 0 }];
+  });
 
   const { data: profiles = [] } = useQuery<ProfileOption[]>({
     queryKey: ["profiles", householdId],
@@ -445,6 +465,16 @@ export default function RoutineForm({ routine, onClose, onSaved, onDeleted }: Pr
 
       {/* Actions */}
       <div className="flex gap-3 pt-2">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="min-h-[48px] rounded-xl border border-gray-300 px-4 font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+            aria-label="Back to templates"
+          >
+            ← Templates
+          </button>
+        )}
         <button
           type="button"
           onClick={onClose}

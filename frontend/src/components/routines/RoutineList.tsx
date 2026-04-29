@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { routines as routinesApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
-import type { Routine, RoutineStep } from "@/types";
+import type { Routine, RoutineStep, RoutineTemplate } from "@/types";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
 import Modal from "@/components/shared/Modal";
 import RoutineStepper from "./RoutineStepper";
 import RoutineForm from "./RoutineForm";
+import TemplatePicker from "./TemplatePicker";
 
 export type { Routine, RoutineStep };
 
@@ -36,8 +37,18 @@ export default function RoutineList() {
   const householdId = useHouseholdStore((s) => s.householdId);
   const storeProfiles = useHouseholdStore((s) => s.profiles);
   const [selectedRoutine, setSelectedRoutine] = useState<Routine | null>(null);
-  const [showForm, setShowForm] = useState(false);
+  const [modalMode, setModalMode] = useState<
+    "closed" | "picker" | "create" | "edit"
+  >("closed");
   const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<RoutineTemplate | null>(null);
+
+  const closeModal = () => {
+    setModalMode("closed");
+    setEditingRoutine(null);
+    setSelectedTemplate(null);
+  };
 
   const { data: routines = [], isLoading, error } = useQuery<Routine[]>({
     queryKey: ["routines", householdId],
@@ -90,7 +101,7 @@ export default function RoutineList() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Routines</h1>
         <button
-          onClick={() => setShowForm(true)}
+          onClick={() => setModalMode("picker")}
           className="touch-target rounded-xl bg-[var(--color-accent,theme(colors.blue.600))] px-5 py-2 font-semibold text-white shadow transition hover:opacity-90 active:scale-95"
         >
           + Add Routine
@@ -236,6 +247,7 @@ export default function RoutineList() {
                           onClick={(e) => {
                             e.stopPropagation();
                             setEditingRoutine(routine);
+                            setModalMode("edit");
                           }}
                           className="touch-target rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-blue-600 dark:hover:bg-gray-700 dark:hover:text-blue-400"
                           aria-label="Edit routine"
@@ -273,36 +285,66 @@ export default function RoutineList() {
           icon="📋"
           title="No routines yet"
           description='Tap "Add Routine" to get started'
-          action={{ label: "Add Routine", onClick: () => setShowForm(true) }}
+          action={{ label: "Add Routine", onClick: () => setModalMode("picker") }}
         />
       )}
 
-      {/* Create / Edit modal */}
+      {/* Picker / Create / Edit modal */}
       <Modal
-        open={showForm || !!editingRoutine}
-        onClose={() => {
-          setShowForm(false);
-          setEditingRoutine(null);
-        }}
-        title={editingRoutine ? "Edit Routine" : "New Routine"}
+        open={modalMode !== "closed"}
+        onClose={closeModal}
+        title={
+          modalMode === "edit"
+            ? "Edit Routine"
+            : modalMode === "picker"
+              ? "Choose a Template"
+              : selectedTemplate
+                ? `New: ${selectedTemplate.name}`
+                : "New Routine"
+        }
       >
-        <RoutineForm
-          routine={editingRoutine ?? undefined}
-          onClose={() => {
-            setShowForm(false);
-            setEditingRoutine(null);
-          }}
-          onSaved={() => {
-            setShowForm(false);
-            setEditingRoutine(null);
-            queryClient.invalidateQueries({ queryKey: ["routines"] });
-          }}
-          onDeleted={() => {
-            setShowForm(false);
-            setEditingRoutine(null);
-            queryClient.invalidateQueries({ queryKey: ["routines"] });
-          }}
-        />
+        {modalMode === "picker" ? (
+          <TemplatePicker
+            onSelect={(tpl) => {
+              setSelectedTemplate(tpl);
+              setModalMode("create");
+            }}
+            onCancel={closeModal}
+          />
+        ) : (
+          <RoutineForm
+            // Re-mount the form when switching templates so initial state
+            // is recomputed cleanly.
+            key={
+              modalMode === "edit"
+                ? `edit-${editingRoutine?.id ?? ""}`
+                : `create-${selectedTemplate?.id ?? "scratch"}`
+            }
+            routine={editingRoutine ?? undefined}
+            template={
+              modalMode === "create" && selectedTemplate
+                ? selectedTemplate
+                : undefined
+            }
+            onBack={
+              modalMode === "create"
+                ? () => {
+                    setSelectedTemplate(null);
+                    setModalMode("picker");
+                  }
+                : undefined
+            }
+            onClose={closeModal}
+            onSaved={() => {
+              closeModal();
+              queryClient.invalidateQueries({ queryKey: ["routines"] });
+            }}
+            onDeleted={() => {
+              closeModal();
+              queryClient.invalidateQueries({ queryKey: ["routines"] });
+            }}
+          />
+        )}
       </Modal>
     </div>
   );
