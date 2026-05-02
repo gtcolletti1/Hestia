@@ -3,8 +3,10 @@ import { NavLink, Outlet, useLocation, Link } from "react-router-dom";
 import Clock from "@/components/shared/Clock";
 import HestiaLogo from "@/components/shared/HestiaLogo";
 import NotificationToast from "@/components/shared/NotificationToast";
+import PrivacyPinModal from "@/components/shared/PrivacyPinModal";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
+import { usePrivacyRevealStore } from "@/stores/privacyRevealStore";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 
@@ -36,7 +38,33 @@ export default function AppShell() {
   const { toasts, dismissToast, requestPermission } = useNotifications();
   const { modulesEnabled, privacyMode } = useHouseholdSettings();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const privacyExpiresAt = usePrivacyRevealStore((s) => s.expiresAt);
+  const lockPrivacy = usePrivacyRevealStore((s) => s.lock);
+  const tickPrivacy = usePrivacyRevealStore((s) => s._tick);
+  const isRevealed = privacyExpiresAt !== null && privacyExpiresAt > Date.now();
+
+  // Re-render every 30s while a reveal is active so the countdown updates
+  // and we auto-relock when the window expires.
+  const [, setNow] = useState(0);
+  useEffect(() => {
+    if (!privacyMode || privacyExpiresAt === null) return;
+    const id = window.setInterval(() => {
+      tickPrivacy();
+      setNow((n) => n + 1);
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, [privacyMode, privacyExpiresAt, tickPrivacy]);
+
+  function formatRemaining(): string {
+    if (privacyExpiresAt === null) return "";
+    const ms = Math.max(0, privacyExpiresAt - Date.now());
+    const min = Math.floor(ms / 60_000);
+    const sec = Math.floor((ms % 60_000) / 1000);
+    return `${min}:${sec.toString().padStart(2, "0")}`;
+  }
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -74,7 +102,7 @@ export default function AppShell() {
   }, [profiles.length, householdName, fetchProfiles, fetchHousehold]);
 
   return (
-    <div className={`flex h-screen flex-col bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 ${privacyMode ? "privacy-mode" : ""}`}>
+    <div className={`flex h-screen flex-col bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 ${privacyMode ? "privacy-mode" : ""} ${privacyMode && isRevealed ? "privacy-revealed" : ""}`}>
       <NotificationToast toasts={toasts} onDismiss={dismissToast} />
       {/* Top bar */}
       <header className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-3 dark:border-gray-700 dark:bg-gray-800">
@@ -96,6 +124,37 @@ export default function AppShell() {
           )}
         </div>
         <div className="flex items-center gap-3">
+          {/* Privacy reveal toggle (only visible when household has privacy
+              mode enabled). Locked = open the PIN modal; revealed = lock
+              again immediately. */}
+          {privacyMode && (
+            <button
+              onClick={() => {
+                if (isRevealed) {
+                  lockPrivacy();
+                } else {
+                  setShowPinModal(true);
+                }
+              }}
+              className="touch-target flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-gray-600 transition-colors hover:bg-gray-100 active:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700 dark:active:bg-gray-600"
+              aria-label={isRevealed ? "Hide details" : "Reveal details with PIN"}
+              title={
+                isRevealed
+                  ? `Visible — tap to hide (${formatRemaining()} left)`
+                  : "Tap to reveal with PIN"
+              }
+            >
+              <span className="text-lg" aria-hidden="true">
+                {isRevealed ? "👁️" : "🔒"}
+              </span>
+              {isRevealed && (
+                <span className="hidden sm:inline text-xs font-mono tabular-nums text-gray-500 dark:text-gray-400">
+                  {formatRemaining()}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Profile switcher */}
           <div className="relative" ref={menuRef}>
             <button
@@ -192,6 +251,8 @@ export default function AppShell() {
           </div>
         </nav>
       )}
+
+      {showPinModal && <PrivacyPinModal onClose={() => setShowPinModal(false)} />}
     </div>
   );
 }

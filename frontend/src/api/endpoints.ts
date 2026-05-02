@@ -284,6 +284,9 @@ export const auth = {
     client.post<{ access_token: string; token_type: string; profile: { id: string; name: string; role: "admin" | "standard" | "kid"; color: string; avatar_url?: string; household_id: string } }>("/auth/login", data),
 
   me: () => client.get<Profile>("/auth/me"),
+
+  verifyPin: (pin: string) =>
+    client.post<void>("/auth/verify-pin", { pin }),
 };
 
 // --- Integrations ---

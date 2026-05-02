@@ -38,6 +38,10 @@ class PinRequest(BaseModel):
     pin: str
 
 
+class VerifyPinRequest(BaseModel):
+    pin: str
+
+
 class ProfileOut(BaseModel):
     id: str
     name: str
@@ -235,6 +239,49 @@ async def set_pin(
 
     target_profile.pin_hash = pwd_context.hash(body.pin)
     await db.flush()
+
+
+@router.post("/verify-pin", status_code=status.HTTP_204_NO_CONTENT)
+async def verify_pin(
+    body: VerifyPinRequest,
+    db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
+):
+    """Verify a PIN against any active member of the current household.
+
+    Used to gate sensitive UI affordances (e.g. revealing privacy-blurred
+    event details on the wall display). The caller must already be
+    authenticated; this only confirms a household member is physically
+    present and willing to identify themselves.
+
+    Returns 204 if the PIN matches **any** active member of
+    ``current_profile.household_id``; 401 otherwise.
+    """
+    if not body.pin:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid PIN"
+        )
+
+    result = await db.execute(
+        select(Profile).where(
+            Profile.household_id == current_profile.household_id,
+            Profile.is_active.is_(True),
+            Profile.pin_hash.is_not(None),
+        )
+    )
+    candidates = result.scalars().all()
+
+    for candidate in candidates:
+        try:
+            if pwd_context.verify(body.pin, candidate.pin_hash):
+                return
+        except ValueError:
+            # Malformed hash on disk — skip this profile but keep checking.
+            continue
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid PIN"
+    )
 
 
 @router.get("/me", response_model=ProfileOut)
