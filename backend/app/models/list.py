@@ -17,7 +17,8 @@ class ListCategory(str, enum.Enum):
     packing = "packing"
     school = "school"
     errands = "errands"
-    custom = "custom"
+    other = "other"
+    custom = "custom"  # Deprecated: kept so legacy rows remain valid; not surfaced in UI.
 
 
 class TaskList(Base):
@@ -33,7 +34,7 @@ class TaskList(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     category: Mapped[ListCategory] = mapped_column(
-        default=ListCategory.custom, nullable=False
+        default=ListCategory.other, nullable=False
     )
     icon: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     sort_order: Mapped[int] = mapped_column(default=0, nullable=False)

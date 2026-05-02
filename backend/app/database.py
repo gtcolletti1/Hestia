@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+import asyncio
 import logging
 
 from sqlalchemy import inspect, text
@@ -65,9 +66,11 @@ async def init_db() -> None:
     has_app_tables = any(t != "alembic_version" for t in existing_tables)
 
     if has_alembic:
-        # Normal path: let Alembic catch the DB up.
+        # Normal path: let Alembic catch the DB up. Runs in a worker thread
+        # so the synchronous psycopg2 driver doesn't block the asyncio
+        # event loop (which has caused FastAPI startup to hang).
         try:
-            _run_alembic_command("upgrade", "head")
+            await asyncio.to_thread(_run_alembic_command, "upgrade", "head")
             logger.info("Alembic upgrade head completed")
         except Exception:  # pragma: no cover - logged for ops visibility
             logger.exception("Alembic upgrade failed")
@@ -82,11 +85,11 @@ async def init_db() -> None:
             "Database has app tables but no alembic_version. "
             "Stamping head to bring it under Alembic management."
         )
-        _run_alembic_command("stamp", "head")
+        await asyncio.to_thread(_run_alembic_command, "stamp", "head")
         return
 
     # Fresh DB: build the schema from models, then stamp head.
     logger.info("Empty database detected; creating schema and stamping head")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    _run_alembic_command("stamp", "head")
+    await asyncio.to_thread(_run_alembic_command, "stamp", "head")

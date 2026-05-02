@@ -43,7 +43,7 @@ class ListItemResponse(ListItemBase):
 
 class TaskListBase(BaseModel):
     name: str
-    category: ListCategory = ListCategory.custom
+    category: ListCategory = ListCategory.other
     icon: str | None = None
 
 

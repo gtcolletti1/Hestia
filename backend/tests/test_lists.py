@@ -133,3 +133,40 @@ async def test_delete_item(
 
     resp = await authed_client.delete(f"/api/lists/{list_id}/items/{item_id}")
     assert resp.status_code == 204
+
+
+# ── Bug 2 regression: 'other' category works; shopping/chores are rejected ──
+
+
+async def test_create_list_with_other_category(
+    authed_client: AsyncClient, sample_household: Household
+) -> None:
+    """Category 'other' is now a valid backend value (was rejected before)."""
+    resp = await authed_client.post(
+        "/api/lists",
+        json={
+            "household_id": str(sample_household.id),
+            "name": "Misc",
+            "category": "other",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["category"] == "other"
+    assert body["name"] == "Misc"
+
+
+async def test_shopping_and_chores_categories_are_rejected(
+    authed_client: AsyncClient, sample_household: Household
+) -> None:
+    """The removed UI categories 'shopping' and 'chores' must be rejected."""
+    for bad in ("shopping", "chores"):
+        resp = await authed_client.post(
+            "/api/lists",
+            json={
+                "household_id": str(sample_household.id),
+                "name": f"Should fail: {bad}",
+                "category": bad,
+            },
+        )
+        assert resp.status_code == 422, f"expected 422 for category={bad}, got {resp.status_code}: {resp.text}"

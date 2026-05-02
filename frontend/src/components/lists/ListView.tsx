@@ -17,8 +17,8 @@ export const LIST_CATEGORIES = [
   { value: "grocery", label: "Grocery", icon: "🛒" },
   { value: "todo", label: "To-Do", icon: "✅" },
   { value: "packing", label: "Packing", icon: "🧳" },
-  { value: "shopping", label: "Shopping", icon: "🛍️" },
-  { value: "chores", label: "Chores", icon: "🧹" },
+  { value: "school", label: "School", icon: "🎒" },
+  { value: "errands", label: "Errands", icon: "🏃" },
   { value: "other", label: "Other", icon: "📝" },
 ] as const;
 
