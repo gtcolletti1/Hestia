@@ -35,27 +35,41 @@ export default function RoutineStepper({ routine, onClose }: Props) {
   }, [allDone]);
 
   const toggleStep = useMutation({
-    mutationFn: async ({ stepId }: { stepId: string }) =>
-      routinesApi.completeStep(routine.id, stepId, selectedProfileId),
+    mutationFn: async ({
+      stepId,
+      complete,
+    }: {
+      stepId: string;
+      complete: boolean;
+    }) =>
+      complete
+        ? routinesApi.completeStep(routine.id, stepId, selectedProfileId)
+        : routinesApi.uncompleteStep(routine.id, stepId, selectedProfileId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["routines"] });
       queryClient.invalidateQueries({
         queryKey: ["routine-streak", routine.id],
       });
+      queryClient.invalidateQueries({ queryKey: ["points"] });
+      queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
     },
   });
 
   const handleToggle = (stepId: string) => {
     const step = steps.find((s) => s.id === stepId);
-    if (step && !step.completed && step.points_value > 0) {
-      setEarnedPoints((prev) => prev + step.points_value);
+    if (!step) return;
+    const willBeCompleted = !step.completed;
+    if (step.points_value > 0) {
+      setEarnedPoints((prev) =>
+        Math.max(0, prev + (willBeCompleted ? step.points_value : -step.points_value)),
+      );
     }
     setSteps((prev) =>
       prev.map((s) =>
-        s.id === stepId ? { ...s, completed: !s.completed } : s,
+        s.id === stepId ? { ...s, completed: willBeCompleted } : s,
       ),
     );
-    toggleStep.mutate({ stepId });
+    toggleStep.mutate({ stepId, complete: willBeCompleted });
   };
 
   return (

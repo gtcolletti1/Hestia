@@ -148,6 +148,17 @@ export const routines = {
       { params: { profile_id: profileId } },
     ),
 
+  uncompleteStep: (
+    routineId: string,
+    stepId: string,
+    profileId: string,
+  ) =>
+    client.post<RoutineCompletion>(
+      `/routines/${routineId}/steps/${stepId}/uncomplete`,
+      null,
+      { params: { profile_id: profileId } },
+    ),
+
   getStreak: (routineId: string, profileId: string) =>
     client.get<{ streak: number }>(`/routines/${routineId}/streak`, {
       params: { profile_id: profileId },

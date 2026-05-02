@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.api.auth import get_current_profile
 from app.database import get_db
@@ -369,6 +370,10 @@ async def complete_step(
     step_id_str = str(step_id)
     if step_id_str not in completion.completed_steps:
         completion.completed_steps = [*completion.completed_steps, step_id_str]
+        # JSON columns require explicit dirty marking when reassigned so the
+        # update is flushed to the DB. Without this the next request can see
+        # the old value and re-credit points (the bug we're fixing).
+        flag_modified(completion, "completed_steps")
 
         # Award points if the step has a point value
         completed_step = next((s for s in routine.steps if str(s.id) == step_id_str), None)
@@ -386,6 +391,105 @@ async def complete_step(
     if set(completion.completed_steps) >= step_ids:
         completion.is_fully_completed = True
         completion.completed_at = datetime.utcnow()
+
+    await db.flush()
+    await db.refresh(completion)
+    return completion
+
+
+# ── Uncomplete a step ────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/routines/{routine_id}/steps/{step_id}/uncomplete",
+    response_model=RoutineCompletionResponse,
+)
+async def uncomplete_step(
+    routine_id: uuid.UUID,
+    step_id: uuid.UUID,
+    profile_id: uuid.UUID = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
+) -> RoutineCompletion:
+    """Reverse a previously-completed step for today.
+
+    Idempotent: if the step is not currently in today's completed_steps,
+    this is a no-op that returns the current state. If it is, the step is
+    removed and — when ``points_value > 0`` — a negative ``PointLedger``
+    entry is appended so the profile's balance returns to baseline. The
+    ledger remains append-only (PRD US-2.4.1); the debit is the audit
+    record of the reversal.
+    """
+    stmt = (
+        select(Routine)
+        .options(selectinload(Routine.steps))
+        .where(Routine.id == routine_id)
+    )
+    result = await db.execute(stmt)
+    routine = result.scalar_one_or_none()
+    if routine is None:
+        raise HTTPException(status_code=404, detail="Routine not found")
+    if routine.household_id != current_profile.household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    step_ids = {str(s.id) for s in routine.steps}
+    if str(step_id) not in step_ids:
+        raise HTTPException(status_code=404, detail="Step not found in this routine")
+
+    today = date.today()
+
+    stmt = select(RoutineCompletion).where(
+        RoutineCompletion.routine_id == routine_id,
+        RoutineCompletion.profile_id == profile_id,
+        RoutineCompletion.date == today,
+    )
+    result = await db.execute(stmt)
+    completion = result.scalar_one_or_none()
+
+    if completion is None:
+        # Nothing completed today; create an empty record so the response
+        # shape matches complete_step and the client has a consistent
+        # idempotent interface.
+        completion = RoutineCompletion(
+            routine_id=routine_id,
+            profile_id=profile_id,
+            date=today,
+            completed_steps=[],
+        )
+        db.add(completion)
+        await db.flush()
+        await db.refresh(completion)
+        return completion
+
+    step_id_str = str(step_id)
+    if step_id_str in completion.completed_steps:
+        completion.completed_steps = [
+            s for s in completion.completed_steps if s != step_id_str
+        ]
+        flag_modified(completion, "completed_steps")
+
+        # Reverse the point award if this step had one. We always debit
+        # exactly the step's current points_value; this is correct because
+        # complete_step is itself idempotent (so at most one credit exists
+        # per step per day). The negative entry preserves the audit trail.
+        uncompleted_step = next(
+            (s for s in routine.steps if str(s.id) == step_id_str), None
+        )
+        if uncompleted_step and uncompleted_step.points_value > 0:
+            db.add(
+                PointLedger(
+                    household_id=routine.household_id,
+                    profile_id=profile_id,
+                    points=-uncompleted_step.points_value,
+                    reason=f"Uncompleted: {uncompleted_step.label}",
+                    routine_step_id=step_id,
+                )
+            )
+
+        # Removing a step necessarily means the routine is no longer fully
+        # completed for today.
+        completion.is_fully_completed = False
+        completion.completed_at = None
 
     await db.flush()
     await db.refresh(completion)

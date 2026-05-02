@@ -159,3 +159,160 @@ async def test_complete_nonexistent_step_returns_404(
         params={"profile_id": pid},
     )
     assert resp.status_code == 404
+
+
+# ── Uncomplete / no-double-award (Bug 1 regression) ─────────────────────────
+
+
+async def _balance(client: AsyncClient, household_id, profile_id) -> int:
+    """Helper: read current point balance via the rewards API."""
+    r = await client.get(
+        "/api/rewards/points",
+        params={"household_id": str(household_id), "profile_id": str(profile_id)},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["total_points"]
+
+
+async def test_complete_step_is_idempotent_does_not_double_award(
+    authed_client: AsyncClient,
+    sample_household: Household,
+    sample_profile: Profile,
+) -> None:
+    """Calling complete twice for the same step awards points exactly once."""
+    pid = str(sample_profile.id)
+    r = await authed_client.post(
+        "/api/routines",
+        json=_routine_payload(sample_household.id, sample_profile.id),
+    )
+    routine = r.json()
+    step = routine["steps"][0]  # points_value = 1
+
+    base = await _balance(authed_client, sample_household.id, sample_profile.id)
+
+    for _ in range(3):
+        resp = await authed_client.post(
+            f"/api/routines/{routine['id']}/steps/{step['id']}/complete",
+            params={"profile_id": pid},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["completed_steps"].count(step["id"]) == 1
+
+    assert await _balance(authed_client, sample_household.id, sample_profile.id) == base + 1
+
+
+async def test_uncomplete_step_reverses_points_and_marks_not_full(
+    authed_client: AsyncClient,
+    sample_household: Household,
+    sample_profile: Profile,
+) -> None:
+    """Uncompleting a credited step debits the points and clears full flag."""
+    pid = str(sample_profile.id)
+    r = await authed_client.post(
+        "/api/routines",
+        json=_routine_payload(sample_household.id, sample_profile.id),
+    )
+    routine = r.json()
+    steps = routine["steps"]
+
+    base = await _balance(authed_client, sample_household.id, sample_profile.id)
+
+    # Complete every step → fully completed, +3 points
+    for s in steps:
+        await authed_client.post(
+            f"/api/routines/{routine['id']}/steps/{s['id']}/complete",
+            params={"profile_id": pid},
+        )
+    assert await _balance(authed_client, sample_household.id, sample_profile.id) == base + 3
+
+    # Uncomplete the middle step → -1 point, no longer fully completed
+    resp = await authed_client.post(
+        f"/api/routines/{routine['id']}/steps/{steps[1]['id']}/uncomplete",
+        params={"profile_id": pid},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert steps[1]["id"] not in body["completed_steps"]
+    assert body["is_fully_completed"] is False
+    assert body["completed_at"] is None
+    assert await _balance(authed_client, sample_household.id, sample_profile.id) == base + 2
+
+
+async def test_uncomplete_then_recheck_does_not_double_award(
+    authed_client: AsyncClient,
+    sample_household: Household,
+    sample_profile: Profile,
+) -> None:
+    """The previously-reported bug: uncheck/recheck should not farm points."""
+    pid = str(sample_profile.id)
+    r = await authed_client.post(
+        "/api/routines",
+        json=_routine_payload(sample_household.id, sample_profile.id),
+    )
+    routine = r.json()
+    step = routine["steps"][0]  # points_value = 1
+
+    base = await _balance(authed_client, sample_household.id, sample_profile.id)
+
+    # check, uncheck, check, uncheck, check  (5 toggles ending checked)
+    for action in ("complete", "uncomplete", "complete", "uncomplete", "complete"):
+        resp = await authed_client.post(
+            f"/api/routines/{routine['id']}/steps/{step['id']}/{action}",
+            params={"profile_id": pid},
+        )
+        assert resp.status_code == 200
+
+    # Net balance change: exactly +1 (one credit currently held)
+    assert await _balance(authed_client, sample_household.id, sample_profile.id) == base + 1
+
+
+async def test_uncomplete_step_never_completed_is_noop(
+    authed_client: AsyncClient,
+    sample_household: Household,
+    sample_profile: Profile,
+) -> None:
+    """Uncompleting a step that was never completed today is a 200 no-op."""
+    pid = str(sample_profile.id)
+    r = await authed_client.post(
+        "/api/routines",
+        json=_routine_payload(sample_household.id, sample_profile.id),
+    )
+    routine = r.json()
+    step = routine["steps"][0]
+
+    base = await _balance(authed_client, sample_household.id, sample_profile.id)
+
+    resp = await authed_client.post(
+        f"/api/routines/{routine['id']}/steps/{step['id']}/uncomplete",
+        params={"profile_id": pid},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["completed_steps"] == []
+    assert await _balance(authed_client, sample_household.id, sample_profile.id) == base
+
+
+async def test_uncomplete_zero_point_step_does_not_create_ledger_entry(
+    authed_client: AsyncClient,
+    sample_household: Household,
+    sample_profile: Profile,
+) -> None:
+    """Steps with points_value=0 should never produce ledger entries either way."""
+    payload = _routine_payload(sample_household.id, sample_profile.id)
+    payload["steps"][0]["points_value"] = 0
+    pid = str(sample_profile.id)
+    r = await authed_client.post("/api/routines", json=payload)
+    routine = r.json()
+    step = routine["steps"][0]
+
+    base = await _balance(authed_client, sample_household.id, sample_profile.id)
+
+    await authed_client.post(
+        f"/api/routines/{routine['id']}/steps/{step['id']}/complete",
+        params={"profile_id": pid},
+    )
+    await authed_client.post(
+        f"/api/routines/{routine['id']}/steps/{step['id']}/uncomplete",
+        params={"profile_id": pid},
+    )
+
+    assert await _balance(authed_client, sample_household.id, sample_profile.id) == base
