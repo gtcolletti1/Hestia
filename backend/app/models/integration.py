@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+from app.services.encryption import EncryptedString
 
 
 class OAuthProvider(str, enum.Enum):
@@ -43,9 +44,13 @@ class OAuthCredential(Base):
     )
     provider: Mapped[OAuthProvider] = mapped_column(nullable=False)
     access_token: Mapped[str] = mapped_column(
-        Text, nullable=False, comment="Encrypted at rest — use app-level encryption"
+        EncryptedString,
+        nullable=False,
+        comment="Encrypted at rest via EncryptedString TypeDecorator",
     )
-    refresh_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    refresh_token: Mapped[Optional[str]] = mapped_column(
+        EncryptedString, nullable=True
+    )
     token_expiry: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
