@@ -102,8 +102,8 @@ export default function DayView({ date }: DayViewProps) {
                 style={{ backgroundColor: ev.profile_color || "#3b82f6" }}
               >
                 {ev.recurrence_rule && <span title="Recurring">🔁 </span>}
-                {continuationLabel(ev)}
-                <span className="ml-2 text-xs opacity-90">{ev.profile_name}</span>
+                <span className="privacy-blur">{continuationLabel(ev)}</span>
+                <span className="ml-2 text-xs opacity-90 privacy-blur">{ev.profile_name}</span>
               </button>
             ))}
           </div>
@@ -151,12 +151,12 @@ export default function DayView({ date }: DayViewProps) {
             >
               <p className="font-medium truncate">
                 {ev.recurrence_rule && <span title="Recurring">🔁 </span>}
-                {continuationLabel(ev)}
+                <span className="privacy-blur">{continuationLabel(ev)}</span>
               </p>
               <p className="text-xs opacity-90">
                 {formatTime(parseISO(ev.start), "h:mm a", timeFormat)}
               </p>
-              <span className="inline-block mt-0.5 text-xs bg-white/20 rounded px-1">
+              <span className="inline-block mt-0.5 text-xs bg-white/20 rounded px-1 privacy-blur">
                 {ev.profile_name}
               </span>
             </button>

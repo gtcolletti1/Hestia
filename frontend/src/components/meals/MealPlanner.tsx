@@ -181,7 +181,7 @@ export default function MealPlanner() {
                                 style={{ backgroundColor: cook.color }}
                               />
                             )}
-                            <span className="truncate font-medium text-gray-900 dark:text-gray-100">
+                            <span className="truncate font-medium text-gray-900 dark:text-gray-100 privacy-blur">
                               {meal.title}
                             </span>
                           </div>

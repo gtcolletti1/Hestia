@@ -96,11 +96,11 @@ export default function TodaysMeals() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
+                  <div className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate privacy-blur">
                     {meal.title}
                   </div>
                   {meal.description && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1 privacy-blur">
                       {meal.description}
                     </p>
                   )}

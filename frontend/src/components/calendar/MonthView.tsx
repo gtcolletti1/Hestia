@@ -116,7 +116,7 @@ export default function MonthView({ date, onSelectDay }: MonthViewProps) {
                       className="h-2 w-2 shrink-0 rounded-full"
                       style={{ backgroundColor: ev.profile_color || "#3b82f6" }}
                     />
-                    <span className="text-xs truncate">{ev.title}</span>
+                    <span className="text-xs truncate privacy-blur">{ev.title}</span>
                   </div>
                 ))}
                 {dayEvts.length > MAX_VISIBLE_EVENTS && (
