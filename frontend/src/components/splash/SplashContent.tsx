@@ -40,7 +40,7 @@ export default function SplashContent({ data, timeFormat }: SplashContentProps) 
 
   return (
     <div className="flex h-full w-full flex-col gap-6 p-8 text-[color:var(--splash-text)]">
-      <ClockHeader iso={clock.iso} timeFormat={timeFormat} weather={weather} showWeather={hasWeather} />
+      <ClockHeader iso={clock.iso_now} timeFormat={timeFormat} weather={weather} showWeather={hasWeather} />
 
       <div className="grid flex-1 min-h-0 grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Agenda spans 2/3 on wide screens — it's the most info-dense
@@ -92,9 +92,9 @@ interface ClockHeaderProps {
 
 function ClockHeader({ iso, timeFormat, weather, showWeather }: ClockHeaderProps) {
   // We re-derive ``now`` locally and tick every minute. The server's
-  // ``clock.iso`` is treated as a hint (used only for the initial paint
-  // before the first interval fires) — once mounted, the wall clock
-  // is the source of truth so the displayed minute matches reality.
+  // ``clock.iso_now`` is treated as a hint (used only for the initial
+  // paint before the first interval fires) — once mounted, the wall
+  // clock is the source of truth so the displayed minute matches reality.
   const [now, setNow] = useState(() => {
     try {
       return parseISO(iso);
@@ -155,7 +155,9 @@ function SectionHeading({ icon, label }: { icon: string; label: string }) {
   );
 }
 
-// ── Agenda with viewport-aware spill ────────────────────────────────────────
+// Re-export the spill-aware agenda block so tests can exercise it
+// directly without rendering the full splash view.
+export { AgendaBlock };
 
 function AgendaBlock({ days, timeFormat }: { days: SplashDay[]; timeFormat: "12h" | "24h" }) {
   const containerRef = useRef<HTMLDivElement>(null);

@@ -15,7 +15,8 @@ export type SplashMode = "ambient" | "photo" | "alternating";
 export type SplashCalendarMode = "off" | "busy_only" | "hidden";
 
 export interface SplashClock {
-  iso: string;
+  date: string;
+  iso_now: string;
   timezone: string;
   time_format: "12h" | "24h";
 }
