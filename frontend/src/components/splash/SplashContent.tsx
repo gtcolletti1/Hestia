@@ -39,45 +39,72 @@ export default function SplashContent({ data, timeFormat }: SplashContentProps) 
   const hasMessages = messages !== null && messages.length > 0;
 
   return (
-    <div className="flex h-full w-full flex-col gap-6 p-8 text-[color:var(--splash-text)]">
+    <div className="relative flex h-full w-full flex-col gap-5 p-6 sm:p-8 text-[color:var(--splash-text)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
       <ClockHeader iso={clock.iso_now} timeFormat={timeFormat} weather={weather} showWeather={hasWeather} />
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid flex-1 min-h-0 grid-cols-1 gap-5 lg:grid-cols-3">
         {/* Agenda spans 2/3 on wide screens — it's the most info-dense
             section and the one most likely to need viewport spill. */}
         {hasAgenda && (
-          <section className="lg:col-span-2 min-h-0 flex flex-col">
+          <SplashCard className="lg:col-span-2 min-h-0 flex flex-col">
             <SectionHeading icon="📅" label="Agenda" />
             <AgendaBlock days={days!} timeFormat={timeFormat} />
-          </section>
+          </SplashCard>
         )}
 
-        <div className="flex min-h-0 flex-col gap-6">
+        <div className="flex min-h-0 flex-col gap-5">
           {hasRoutines && (
-            <section className="min-h-0 flex flex-col">
+            <SplashCard className="min-h-0 flex flex-col">
               <SectionHeading icon="✨" label="Today's Routines" />
               <RoutinesBlock routines={routines!} />
-            </section>
+            </SplashCard>
           )}
 
           {hasMeals && (
-            <section className="min-h-0 flex flex-col">
+            <SplashCard className="min-h-0 flex flex-col">
               <SectionHeading icon="🍽️" label="Tonight" />
               <MealsBlock meals={meals!} />
-            </section>
+            </SplashCard>
           )}
 
           {hasMessages && (
-            <section className="min-h-0 flex flex-col">
+            <SplashCard className="min-h-0 flex flex-col">
               <SectionHeading icon="💬" label="Messages" />
               <MessagesBlock messages={messages!} />
-            </section>
+            </SplashCard>
           )}
         </div>
       </div>
 
       <FooterHint />
     </div>
+  );
+}
+
+/**
+ * Translucent card surface used behind every content block. Sits over
+ * the Hestia hearth backdrop with a subtle blur + light border so the
+ * data reads cleanly against the warm fire.
+ */
+function SplashCard({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={`rounded-2xl p-4 sm:p-5 backdrop-blur-md ring-1 ${className}`}
+      style={{
+        background: "var(--splash-surface)",
+        // ring-1 picks up currentColor by default; force the splash
+        // border so the ring isn't tied to text colour.
+        boxShadow: "inset 0 0 0 1px var(--splash-border)",
+      }}
+    >
+      {children}
+    </section>
   );
 }
 

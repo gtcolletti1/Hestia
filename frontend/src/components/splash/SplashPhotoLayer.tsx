@@ -70,29 +70,22 @@ export default function SplashPhotoLayer({
   const current = photoList[currentIndex];
 
   return (
-    <div className="absolute inset-0 flex h-full w-full items-center justify-center bg-black">
-      {current ? (
+    <div className="absolute inset-0 flex h-full w-full items-center justify-center">
+      {/* When the household has uploaded photos, paint the current one
+          over the global hearth backdrop. With no photos (or pre-login
+          401), we let the hearth show through and just render the
+          clock overlay. */}
+      {current && (
         <img
           key={current.id}
           src={current.url}
           alt={current.caption ?? ""}
-          className="absolute inset-0 h-full w-full object-cover opacity-70 transition-opacity duration-1000"
+          className="absolute inset-0 h-full w-full object-cover opacity-90 transition-opacity duration-1000"
           draggable={false}
-        />
-      ) : (
-        <img
-          src="/hestia-splash.png"
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover opacity-80"
-          draggable={false}
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-          }}
         />
       )}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30" />
-      <div className="relative z-10 text-center text-white">
+      <div className="relative z-10 text-center text-white drop-shadow-lg">
         <p className="text-[clamp(4rem,14vw,10rem)] font-thin tabular-nums">
           {formatTime(now, "h:mm", timeFormat)}
         </p>

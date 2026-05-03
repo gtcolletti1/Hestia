@@ -83,21 +83,27 @@ export default function SplashView({ onUnlock, previewMode, disableUnlock }: Spl
     return () => window.clearTimeout(id);
   }, [mode, displayed, ambientSeconds, photoSeconds, pausedUntil]);
 
+  // The Hestia hearth is the default backdrop for every splash — both
+  // the ambient data layer and the photo-frame layer sit on top of it
+  // (the photo layer simply overlays its own image when one is loaded).
+  // A dimming scrim guarantees text contrast on the bright fire.
   // CSS variables drive the kid-safe palette through Tailwind
-  // arbitrary-value class references inside SplashContent (e.g.
-  // `text-[color:var(--splash-text)]`), so theme changes don't
-  // require a re-render of every coloured node.
+  // arbitrary-value class references inside SplashContent.
   const styleVars = useMemo<React.CSSProperties>(() => {
     const dark = theme === "dark";
     return {
       "--splash-bg-start": dark ? KID_SAFE_PALETTE.bgStartDark : KID_SAFE_PALETTE.bgStart,
       "--splash-bg-end": dark ? KID_SAFE_PALETTE.bgEndDark : KID_SAFE_PALETTE.bgEnd,
-      "--splash-surface": dark ? KID_SAFE_PALETTE.surfaceDark : KID_SAFE_PALETTE.surface,
-      "--splash-text": dark ? KID_SAFE_PALETTE.textInverse : KID_SAFE_PALETTE.text,
-      "--splash-text-muted": dark
-        ? KID_SAFE_PALETTE.textInverseMuted
-        : KID_SAFE_PALETTE.textMuted,
-      background: `linear-gradient(135deg, var(--splash-bg-start), var(--splash-bg-end))`,
+      // Card surface — a translucent dark plate so light text is
+      // readable on top of the warm hearth photo regardless of theme.
+      "--splash-surface": "rgba(17,24,39,0.55)",
+      "--splash-surface-strong": "rgba(17,24,39,0.72)",
+      "--splash-border": "rgba(255,255,255,0.12)",
+      // Always use light text — the hearth backdrop is dark/warm and
+      // we don't want a light/dark theme flip to make text disappear
+      // on the same photo.
+      "--splash-text": KID_SAFE_PALETTE.textInverse,
+      "--splash-text-muted": KID_SAFE_PALETTE.textInverseMuted,
     } as React.CSSProperties;
   }, [theme]);
 
@@ -177,7 +183,19 @@ function FullbleedTapTarget({ onUnlock, onInteract, disableUnlock, style, childr
       aria-label={disableUnlock ? "Splash preview" : "Tap to sign in"}
       tabIndex={0}
     >
-      {children}
+      {/* Backdrop: the Hestia hearth fills every splash by default.
+          Sub-layers (e.g. SplashPhotoLayer) can paint their own
+          imagery on top of this. A linear-gradient scrim guarantees
+          contrast at the edges where the fire is brightest. */}
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-cover bg-center"
+        style={{
+          backgroundImage:
+            "linear-gradient(160deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.55) 100%), url('/hestia-splash.png')",
+        }}
+      />
+      <div className="relative h-full w-full">{children}</div>
     </div>
   );
 }
