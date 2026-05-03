@@ -19,7 +19,6 @@ interface HouseholdSettings {
     meals: boolean;
     weather: boolean;
   };
-  privacy_mode: boolean;
   time_format: "12h" | "24h";
   timezone: string;
   weather_lat: number | null;
@@ -53,7 +52,6 @@ const DEFAULT_SETTINGS: HouseholdSettings = {
     meals: true,
     weather: true,
   },
-  privacy_mode: false,
   time_format: "12h",
   timezone:
     (typeof Intl !== "undefined" && Intl.DateTimeFormat().resolvedOptions().timeZone) ||
@@ -429,43 +427,10 @@ export default function SettingsPanel() {
         </div>
       </section>
 
-      {/* Privacy */}
-      <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-          🔒 Privacy
-        </h3>
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Privacy Mode
-            </span>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Hide event details on wall display
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              const updated = { ...form, privacy_mode: !form.privacy_mode };
-              setForm(updated);
-              if (isAdmin) saveMutation.mutate(updated);
-            }}
-            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors min-h-[44px] items-center ${
-              form.privacy_mode
-                ? "bg-blue-600"
-                : "bg-gray-300 dark:bg-gray-600"
-            }`}
-            role="switch"
-            aria-checked={form.privacy_mode}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                form.privacy_mode ? "translate-x-5" : "translate-x-0.5"
-              }`}
-            />
-          </button>
-        </div>
-      </section>
+      {/* Privacy moved to Splash settings (PRD §2.12).
+          The pre-login splash + per-section visibility toggles will
+          land in the Settings UI in Phase 4. For now, admins can
+          adjust splash policy via the API. */}
 
       {/* Time Format */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">

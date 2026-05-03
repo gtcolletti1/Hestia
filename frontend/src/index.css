@@ -31,17 +31,3 @@
   -webkit-user-select: text;
   user-select: text;
 }
-
-/* Privacy mode: blur sensitive content until the user PIN-unlocks the
-   reveal window. The hover/focus auto-reveal is intentionally NOT
-   provided here — passive hover would defeat the privacy gate. The
-   parent layer adds .privacy-revealed when an unlock is active. */
-.privacy-mode .privacy-blur {
-  filter: blur(6px);
-  transition: filter 0.2s ease;
-  cursor: help;
-}
-
-.privacy-mode.privacy-revealed .privacy-blur {
-  filter: none;
-}

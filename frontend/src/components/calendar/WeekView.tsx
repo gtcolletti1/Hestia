@@ -181,7 +181,7 @@ export default function WeekView({ date }: WeekViewProps) {
                 title={ev.title}
               >
                 {ev.recurrence_rule ? "🔁 " : ""}
-                <span className="privacy-blur">{ev.title}</span>
+                <span className="">{ev.title}</span>
               </button>
             ))}
           </div>
@@ -237,7 +237,7 @@ export default function WeekView({ date }: WeekViewProps) {
                     }}
                   >
                     {ev.recurrence_rule ? "🔁 " : ""}
-                    <span className="privacy-blur">{continuationLabel(ev, d)}</span>
+                    <span className="">{continuationLabel(ev, d)}</span>
                   </button>
                 ))}
             </div>

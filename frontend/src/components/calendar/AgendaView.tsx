@@ -129,7 +129,7 @@ export default function AgendaView({ date }: AgendaViewProps) {
                       className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
                       style={{ backgroundColor: ev.profile_color || "#3b82f6" }}
                     />
-                    <div className="flex-1 min-w-0 privacy-blur">
+                    <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">
                         {ev.recurrence_rule && <span title="Recurring">🔁 </span>}
                         {ev.title}
@@ -150,7 +150,7 @@ export default function AgendaView({ date }: AgendaViewProps) {
                         </p>
                       )}
                     </div>
-                    <span className="shrink-0 mt-1 text-xs bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-0.5 privacy-blur">
+                    <span className="shrink-0 mt-1 text-xs bg-gray-100 dark:bg-gray-700 rounded-full px-2 py-0.5">
                       {ev.profile_name}
                     </span>
                   </button>

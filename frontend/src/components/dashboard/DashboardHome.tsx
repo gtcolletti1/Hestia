@@ -79,7 +79,7 @@ function AgendaSection({ buckets, timeFormat }: { buckets: AgendaBucket[]; timeF
                       style={{ backgroundColor: ev.color }}
                     />
                   )}
-                  <div className="min-w-0 flex-1 privacy-blur">
+                  <div className="min-w-0 flex-1">
                     <p className="font-medium truncate">{ev.title}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {formatTime(parseISO(ev.start_time), "h:mm a", timeFormat)}

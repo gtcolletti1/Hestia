@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { admin } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useThemeStore } from "@/stores/themeStore";
+import type { SplashCalendarMode, SplashMode } from "@/types/splash";
 
 interface ModulesEnabled {
   calendar: boolean;
@@ -21,7 +22,16 @@ export interface HouseholdSettings {
   theme: "light" | "dark";
   accent_color: string;
   modules_enabled: ModulesEnabled;
-  privacy_mode: boolean;
+  // Pre-login splash + privacy policy. Replaces the deprecated
+  // post-login `privacy_mode` boolean (PRD §2.12 / Hestia v2.2).
+  splash_mode: SplashMode;
+  splash_alternating_seconds: number;
+  splash_calendar_mode: SplashCalendarMode;
+  splash_agenda_max_days: number;
+  splash_show_routines: boolean;
+  splash_show_meals: boolean;
+  splash_show_weather: boolean;
+  splash_show_messages: boolean;
   time_format: "12h" | "24h";
   weather_lat: number | null;
   weather_lon: number | null;
@@ -74,7 +84,6 @@ export function useHouseholdSettings() {
     settings: query.data,
     isLoading: query.isLoading,
     modulesEnabled: query.data?.modules_enabled ?? DEFAULT_MODULES,
-    privacyMode: query.data?.privacy_mode ?? false,
     timeFormat: (query.data?.time_format ?? "12h") as "12h" | "24h",
   };
 }

@@ -34,7 +34,7 @@ export default function MealCard({ meal, profiles, onEdit }: MealCardProps) {
       }}
     >
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 leading-tight privacy-blur">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 leading-tight">
           {meal.title}
         </h3>
         <span className="shrink-0 rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-sm">
@@ -43,7 +43,7 @@ export default function MealCard({ meal, profiles, onEdit }: MealCardProps) {
       </div>
 
       {meal.description && (
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-2 privacy-blur">
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
           {meal.description}
         </p>
       )}
@@ -54,7 +54,7 @@ export default function MealCard({ meal, profiles, onEdit }: MealCardProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline privacy-blur"
+          className="mt-2 inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
         >
           📖 Recipe
         </a>
@@ -66,7 +66,7 @@ export default function MealCard({ meal, profiles, onEdit }: MealCardProps) {
             className="inline-block h-3 w-3 rounded-full"
             style={{ backgroundColor: cook.color }}
           />
-          <span className="text-sm text-gray-600 dark:text-gray-300 privacy-blur">
+          <span className="text-sm text-gray-600 dark:text-gray-300">
             {cook.name}
           </span>
         </div>

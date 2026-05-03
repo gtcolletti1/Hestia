@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import AppShell from "@/components/layout/AppShell";
 import KioskWrapper from "@/components/layout/KioskWrapper";
@@ -6,6 +6,7 @@ import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import SetupWizard from "@/components/onboarding/SetupWizard";
 import ProfileSelector from "@/components/onboarding/ProfileSelector";
 import HouseholdPicker from "@/components/onboarding/HouseholdPicker";
+import SplashView from "@/components/splash/SplashView";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
 
@@ -26,6 +27,18 @@ export default function App() {
   const bootStatus = useHouseholdStore((s) => s.bootStatus);
   const discover = useHouseholdStore((s) => s.discover);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Pre-login flow (PRD §2.12): show the policy-controlled splash
+  // BEFORE the profile selector. ``splashUnlocked`` flips to true on
+  // the first user gesture and is reset every time the household
+  // returns to the unauthenticated state (logout, lock-now, kiosk
+  // auto-logout from the screensaver).
+  const [splashUnlocked, setSplashUnlocked] = useState(false);
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setSplashUnlocked(false);
+    }
+  }, [isAuthenticated]);
 
   // Single-household appliance: ask the server who exists before deciding
   // whether to show the setup wizard, the household picker, or sign-in.
@@ -78,6 +91,12 @@ export default function App() {
     }
 
     if (!isAuthenticated) {
+      // Splash sits BETWEEN "the household is selected" and "the user
+      // is signing in". Tapping anywhere on the splash advances to
+      // the profile selector.
+      if (!splashUnlocked) {
+        return <SplashView onUnlock={() => setSplashUnlocked(true)} />;
+      }
       return <ProfileSelector />;
     }
 

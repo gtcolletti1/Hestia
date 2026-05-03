@@ -285,8 +285,26 @@ export const auth = {
 
   me: () => client.get<Profile>("/auth/me"),
 
-  verifyPin: (pin: string) =>
-    client.post<void>("/auth/verify-pin", { pin }),
+  // POST /auth/lock — server-side acknowledgment of an explicit
+  // "Lock now" press. The JWT itself is stateless; the client must
+  // also clear its local auth state to actually return to splash.
+  lock: () => client.post<void>("/auth/lock"),
+};
+
+// --- Splash (unauthenticated, pre-login) ---
+
+import type { SplashResponse } from "@/types/splash";
+
+export const splash = {
+  get: (householdId?: string) =>
+    client.get<SplashResponse>("/splash", {
+      // Unauthenticated endpoint — strip the Bearer header that the
+      // global request interceptor would otherwise add when a stale
+      // token is still in localStorage. The backend ignores it
+      // anyway, but this keeps requests clean and easy to debug.
+      params: householdId ? { household_id: householdId } : undefined,
+      headers: { Authorization: "" },
+    }),
 };
 
 // --- Integrations ---

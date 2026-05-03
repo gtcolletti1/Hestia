@@ -127,7 +127,7 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-4">
           <h2 className="text-xl font-bold truncate">
-            {editing ? "Edit Event" : <span className="privacy-blur">{event.title}</span>}
+            {editing ? "Edit Event" : <span className="">{event.title}</span>}
           </h2>
           <button
             className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
@@ -266,7 +266,7 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
                   className="h-4 w-4 rounded-full shrink-0"
                   style={{ backgroundColor: event.profile_color }}
                 />
-                <span className="text-sm text-gray-500 dark:text-gray-400 privacy-blur">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
                   {event.profile_name}
                 </span>
               </div>
@@ -281,7 +281,7 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
                 {event.location && (
                   <p>
                     <span className="font-medium">Where: </span>
-                    <span className="privacy-blur">{event.location}</span>
+                    <span className="">{event.location}</span>
                   </p>
                 )}
                 {event.recurrence_rule && (
@@ -291,7 +291,7 @@ export default function EventModal({ event, onClose, profiles = [] }: EventModal
                   </p>
                 )}
                 {event.description && (
-                  <p className="text-gray-600 dark:text-gray-300 whitespace-pre-wrap privacy-blur">
+                  <p className="text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
                     {event.description}
                   </p>
                 )}
