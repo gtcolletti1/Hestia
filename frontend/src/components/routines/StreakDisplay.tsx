@@ -23,7 +23,7 @@ export default function StreakDisplay({ routineId, profileId }: Props) {
 
   if (!data) return null;
 
-  const streak = data.streak;
+  const streak = data.current_streak;
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">

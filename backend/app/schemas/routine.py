@@ -14,6 +14,7 @@ class RoutineStepBase(BaseModel):
     icon: str | None = None
     sort_order: int
     points_value: int = 0
+    days_of_week: list[int] | None = None
 
 
 class RoutineStepCreate(RoutineStepBase):

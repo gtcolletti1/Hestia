@@ -25,7 +25,10 @@ from app.schemas.dashboard import (
     ProfileSummary,
 )
 from app.services.routine_window import (
+    applicable_step_ids,
+    routine_runs_today,
     completed_routine_ids_today,
+    compute_current_streak,
     current_time_block,
 )
 
@@ -165,7 +168,7 @@ async def get_dashboard(
     )
     todays_routines = [
         r for r in routines_result.scalars().all()
-        if current_weekday in (r.days_of_week or [])
+        if routine_runs_today(r, current_weekday)
     ]
     completed_ids = await completed_routine_ids_today(db, todays_routines, today)
 
@@ -176,33 +179,20 @@ async def get_dashboard(
             continue
         streak = 0
         if routine.profile_id is not None:
-            comp_result = await db.execute(
-                select(RoutineCompletion.date)
-                .where(
-                    RoutineCompletion.routine_id == routine.id,
-                    RoutineCompletion.profile_id == routine.profile_id,
-                    RoutineCompletion.is_fully_completed.is_(True),
-                )
-                .order_by(RoutineCompletion.date.desc())
+            streak = await compute_current_streak(
+                db, routine, routine.profile_id, today
             )
-            dates = [row[0] for row in comp_result.all()]
-            expected = today
-            for d in dates:
-                if d == expected:
-                    streak += 1
-                    expected = expected - timedelta(days=1)
-                elif streak == 0 and d == today - timedelta(days=1):
-                    streak = 1
-                    expected = d - timedelta(days=1)
-                else:
-                    break
+        # Show the count of steps actually applicable today, not the
+        # routine's full step library — a Mon-Fri "Pack backpack" step
+        # shouldn't be counted on Sundays.
+        applicable_count = len(applicable_step_ids(routine, current_weekday))
         active_routines.append(
             {
                 "id": str(routine.id),
                 "name": routine.name,
                 "time_block": routine.time_block.value,
                 "profile_id": str(routine.profile_id) if routine.profile_id else None,
-                "step_count": len(routine.steps),
+                "step_count": applicable_count,
                 "streak_days": streak,
             }
         )

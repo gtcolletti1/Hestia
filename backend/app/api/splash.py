@@ -27,7 +27,10 @@ from app.models.routine import Routine, RoutineCompletion
 from app.models.user import Household, Profile
 from app.schemas.admin import HouseholdSettings
 from app.services.routine_window import (
+    applicable_step_ids,
+    routine_runs_today,
     completed_routine_ids_today,
+    compute_current_streak,
     current_time_block,
 )
 from app.schemas.splash import (
@@ -217,39 +220,20 @@ async def _build_routines(
     )
     todays_routines = [
         r for r in routines_result.scalars().all()
-        if current_weekday in (r.days_of_week or [])
+        if routine_runs_today(r, current_weekday)
     ]
 
     completed_ids = await completed_routine_ids_today(db, todays_routines, today)
     routines = [r for r in todays_routines if r.id not in completed_ids]
 
-    # One streak query per active routine. The set of "today" routines
+    # One streak walk per active routine. The set of "today" routines
     # is small (usually < 10) so the N+1 is acceptable; if it grows we
     # can batch with a window function.
     out: list[SplashRoutine] = []
     for r in routines:
         streak = 0
         if r.profile_id is not None:
-            comp_result = await db.execute(
-                select(RoutineCompletion.date)
-                .where(
-                    RoutineCompletion.routine_id == r.id,
-                    RoutineCompletion.profile_id == r.profile_id,
-                    RoutineCompletion.is_fully_completed.is_(True),
-                )
-                .order_by(RoutineCompletion.date.desc())
-            )
-            dates = [row[0] for row in comp_result.all()]
-            expected = today
-            for d in dates:
-                if d == expected:
-                    streak += 1
-                    expected = expected - timedelta(days=1)
-                elif streak == 0 and d == today - timedelta(days=1):
-                    streak = 1
-                    expected = d - timedelta(days=1)
-                else:
-                    break
+            streak = await compute_current_streak(db, r, r.profile_id, today)
 
         if r.profile is not None:
             assignee = SplashRoutineAssignee(
@@ -266,7 +250,7 @@ async def _build_routines(
                 id=r.id,
                 name=r.name,
                 time_block=r.time_block.value,
-                step_count=len(r.steps),
+                step_count=len(applicable_step_ids(r, current_weekday)),
                 streak_days=streak,
                 assignee=assignee,
             )

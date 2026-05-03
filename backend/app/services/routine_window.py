@@ -1,5 +1,6 @@
 """Helpers for filtering routines to the current time block and excluding
-routines already completed today.
+routines already completed today, plus the per-step day-of-week scheduling
+logic that drives both the stepper UI and the streak rule.
 
 Used by both the dashboard and splash endpoints so the visibility rules
 stay consistent across views.
@@ -8,13 +9,14 @@ stay consistent across views.
 from __future__ import annotations
 
 import uuid
-from datetime import date, time
+from datetime import date, time, timedelta
 from typing import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.models.routine import Routine, RoutineCompletion, TimeBlock
+from app.models.routine import Routine, RoutineCompletion, RoutineStep, TimeBlock
 
 
 def current_time_block(local_time: time) -> TimeBlock:
@@ -33,6 +35,52 @@ def current_time_block(local_time: time) -> TimeBlock:
     return TimeBlock.bedtime
 
 
+def step_applies_on(step: RoutineStep, weekday: int) -> bool:
+    """Whether ``step`` runs on ``weekday`` (0=Mon..6=Sun).
+
+    A step with NULL/empty ``days_of_week`` runs on every day the routine
+    runs — that's the default and matches pre-Phase-B behavior.
+    """
+    dow = step.days_of_week
+    if not dow:
+        return True
+    return weekday in dow
+
+
+def applicable_step_ids(routine: Routine, weekday: int) -> set[str]:
+    """IDs (as str) of steps in ``routine`` that apply on ``weekday``."""
+    return {str(s.id) for s in routine.steps if step_applies_on(s, weekday)}
+
+
+def is_routine_complete_for(
+    routine: Routine, weekday: int, completed_step_ids: Iterable[str]
+) -> bool:
+    """True iff every step applicable on ``weekday`` is in ``completed_step_ids``.
+
+    If the routine has no applicable steps for the day (e.g. all steps are
+    weekday-only and it's Sunday), this returns False — the routine should
+    not have been listed for that day in the first place.
+    """
+    needed = applicable_step_ids(routine, weekday)
+    if not needed:
+        return False
+    return needed.issubset(set(completed_step_ids))
+
+
+def routine_runs_today(routine: Routine, weekday: int) -> bool:
+    """Should this routine be listed for ``weekday``?
+
+    True when the routine's day-of-week gate includes today AND either it
+    has no steps at all (legacy / placeholder routine) or at least one
+    step is applicable today.
+    """
+    if weekday not in (routine.days_of_week or []):
+        return False
+    if not routine.steps:
+        return True
+    return bool(applicable_step_ids(routine, weekday))
+
+
 async def completed_routine_ids_today(
     db: AsyncSession,
     routines: Iterable[Routine],
@@ -40,40 +88,125 @@ async def completed_routine_ids_today(
 ) -> set[uuid.UUID]:
     """Return the set of routine ids that are fully completed today.
 
-    For routines assigned to a profile, only completions by that profile
-    count. For unassigned (household) routines, any household completion
-    counts.
+    A routine is "fully completed" when all of its applicable steps for
+    today's weekday are in some matching ``RoutineCompletion.completed_steps``
+    list. For routines assigned to a profile, only completions by that
+    profile count. For unassigned (household) routines, any household
+    completion that satisfies the applicable-step set counts.
     """
     routines = list(routines)
     if not routines:
         return set()
 
     routine_ids = [r.id for r in routines]
-    result = await db.execute(
+    weekday = today.weekday()
+
+    # Map (routine_id, profile_id) -> (completed step ids, any is_fully_completed flag)
+    by_key: dict[tuple[uuid.UUID, uuid.UUID], set[str]] = {}
+    full_flag: dict[tuple[uuid.UUID, uuid.UUID], bool] = {}
+    result2 = await db.execute(
         select(
             RoutineCompletion.routine_id,
             RoutineCompletion.profile_id,
+            RoutineCompletion.completed_steps,
+            RoutineCompletion.is_fully_completed,
         ).where(
             RoutineCompletion.routine_id.in_(routine_ids),
             RoutineCompletion.date == today,
-            RoutineCompletion.is_fully_completed.is_(True),
         )
     )
-    completions = result.all()
-
-    # Map routine -> set of profile_ids that completed it today.
-    by_routine: dict[uuid.UUID, set[uuid.UUID]] = {}
-    for routine_id, profile_id in completions:
-        by_routine.setdefault(routine_id, set()).add(profile_id)
+    for routine_id, profile_id, steps, fully in result2.all():
+        by_key.setdefault((routine_id, profile_id), set()).update(steps or [])
+        if fully:
+            full_flag[(routine_id, profile_id)] = True
 
     completed: set[uuid.UUID] = set()
     for r in routines:
-        done_by = by_routine.get(r.id, set())
-        if not done_by:
+        needed = applicable_step_ids(r, weekday)
+        if not r.steps:
+            # Legacy step-less routine: rely on is_fully_completed flag.
+            if r.profile_id is None:
+                done = any(
+                    flag for (rid, _pid), flag in full_flag.items() if rid == r.id
+                )
+            else:
+                done = full_flag.get((r.id, r.profile_id), False)
+            if done:
+                completed.add(r.id)
+            continue
+        if not needed:
             continue
         if r.profile_id is None:
-            # Unassigned: any completion counts.
-            completed.add(r.id)
-        elif r.profile_id in done_by:
+            # Unassigned: any single profile that completed the applicable
+            # set counts as done for the household view.
+            done = any(
+                steps >= needed
+                for (rid, _pid), steps in by_key.items()
+                if rid == r.id
+            )
+        else:
+            steps = by_key.get((r.id, r.profile_id), set())
+            done = steps >= needed
+        if done:
             completed.add(r.id)
     return completed
+
+
+async def compute_current_streak(
+    db: AsyncSession,
+    routine: Routine,
+    profile_id: uuid.UUID,
+    today: date,
+    max_lookback_days: int = 366,
+) -> int:
+    """Walk backwards across the routine's *scheduled* days, counting
+    consecutive days where every applicable step was completed.
+
+    A routine's scheduled days are days whose weekday is in
+    ``routine.days_of_week``. Non-scheduled days are skipped (they
+    neither extend nor break the streak), so a Sat/Sun-only routine can
+    streak indefinitely.
+
+    If today is scheduled but not yet complete, the walk starts from the
+    most recent prior scheduled day (matching the pre-existing UX where a
+    streak doesn't drop just because today's checklist isn't done yet).
+    """
+    scheduled = list(routine.days_of_week or [])
+    if not scheduled:
+        return 0
+
+    # Pull all completion rows in window once.
+    earliest = today - timedelta(days=max_lookback_days)
+    result = await db.execute(
+        select(RoutineCompletion.date, RoutineCompletion.completed_steps)
+        .where(
+            RoutineCompletion.routine_id == routine.id,
+            RoutineCompletion.profile_id == profile_id,
+            RoutineCompletion.date >= earliest,
+            RoutineCompletion.date <= today,
+        )
+    )
+    by_date: dict[date, set[str]] = {
+        d: set(steps or []) for d, steps in result.all()
+    }
+
+    def is_complete(d: date) -> bool:
+        return is_routine_complete_for(routine, d.weekday(), by_date.get(d, set()))
+
+    streak = 0
+    cursor = today
+    today_scheduled = today.weekday() in scheduled
+    today_done = today_scheduled and is_complete(today)
+
+    if today_scheduled and not today_done:
+        cursor = today - timedelta(days=1)
+
+    while cursor >= earliest:
+        if cursor.weekday() in scheduled:
+            if is_complete(cursor):
+                streak += 1
+                cursor = cursor - timedelta(days=1)
+                continue
+            break
+        cursor = cursor - timedelta(days=1)
+    return streak

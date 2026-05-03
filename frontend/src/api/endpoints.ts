@@ -160,7 +160,11 @@ export const routines = {
     ),
 
   getStreak: (routineId: string, profileId: string) =>
-    client.get<{ streak: number }>(`/routines/${routineId}/streak`, {
+    client.get<{
+      current_streak: number;
+      longest_streak: number;
+      total_completions: number;
+    }>(`/routines/${routineId}/streak`, {
       params: { profile_id: profileId },
     }),
 

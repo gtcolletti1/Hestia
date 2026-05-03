@@ -116,6 +116,9 @@ interface StepInput {
   label: string;
   icon: string;
   points_value: number;
+  // null = inherit from the routine (run on every day the routine runs).
+  // A non-null subset of the routine's days narrows the step to those days.
+  days_of_week: number[] | null;
 }
 
 type TimeBlock = "morning" | "afternoon" | "evening" | "bedtime";
@@ -171,6 +174,7 @@ export default function RoutineForm({
         label: s.label,
         icon: s.icon ?? "",
         points_value: s.points_value ?? 0,
+        days_of_week: s.days_of_week ?? null,
       }));
     }
     if (template) {
@@ -179,9 +183,12 @@ export default function RoutineForm({
         label: s.label,
         icon: s.icon ?? "",
         points_value: s.points_value ?? 0,
+        days_of_week: null,
       }));
     }
-    return [{ key: newStepKey(), label: "", icon: "", points_value: 0 }];
+    return [
+      { key: newStepKey(), label: "", icon: "", points_value: 0, days_of_week: null },
+    ];
   });
 
   const { data: profiles = [] } = useQuery<ProfileOption[]>({
@@ -226,7 +233,10 @@ export default function RoutineForm({
   };
 
   const addStep = () =>
-    setSteps((prev) => [...prev, { key: newStepKey(), label: "", icon: "", points_value: 0 }]);
+    setSteps((prev) => [
+      ...prev,
+      { key: newStepKey(), label: "", icon: "", points_value: 0, days_of_week: null },
+    ]);
 
   const removeStep = (key: string) =>
     setSteps((prev) => prev.filter((s) => s.key !== key));
@@ -234,6 +244,25 @@ export default function RoutineForm({
   const updateStep = (key: string, field: keyof StepInput, value: string) => {
     setSteps((prev) =>
       prev.map((s) => (s.key === key ? { ...s, [field]: value } : s)),
+    );
+  };
+
+  const toggleStepDay = (key: string, day: number) => {
+    setSteps((prev) =>
+      prev.map((s) => {
+        if (s.key !== key) return s;
+        // First click on a step that's "inherit" copies the routine's days
+        // so the user is narrowing from the full set rather than starting empty.
+        const base = s.days_of_week ?? daysOfWeek;
+        const next = base.includes(day)
+          ? base.filter((d) => d !== day)
+          : [...base, day].sort();
+        // If the user re-selects the full routine set, snap back to inherit.
+        const isFullSet =
+          next.length === daysOfWeek.length &&
+          daysOfWeek.every((d) => next.includes(d));
+        return { ...s, days_of_week: isFullSet ? null : next };
+      }),
     );
   };
 
@@ -256,6 +285,9 @@ export default function RoutineForm({
         icon: s.icon || undefined,
         sort_order: i,
         points_value: s.points_value,
+        // Only persist a step-level filter when it's actually narrower
+        // than the routine; null means "every routine day".
+        days_of_week: s.days_of_week,
       }));
 
     saveMutation.mutate({
@@ -379,79 +411,138 @@ export default function RoutineForm({
       <div>
         <span className="mb-2 block text-sm font-medium">Steps</span>
         <div className="space-y-2">
-          {steps.map((step, index) => (
-            <div key={step.key} className="flex items-center gap-2">
-              {/* Reorder */}
-              <div className="flex flex-col">
-                <button
-                  type="button"
-                  onClick={() => moveStep(index, -1)}
-                  disabled={index === 0}
-                  className="min-h-[22px] min-w-[22px] text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                  aria-label="Move up"
-                >
-                  ▲
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveStep(index, 1)}
-                  disabled={index === steps.length - 1}
-                  className="min-h-[22px] min-w-[22px] text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                  aria-label="Move down"
-                >
-                  ▼
-                </button>
-              </div>
-
-              {/* Icon */}
-              <EmojiPicker
-                value={step.icon}
-                onChange={(v) => updateStep(step.key, "icon", v)}
-                placeholder="🪥"
-                ariaLabel={`Icon for step ${index + 1}`}
-              />
-
-              {/* Label */}
-              <input
-                type="text"
-                value={step.label}
-                onChange={(e) => updateStep(step.key, "label", e.target.value)}
-                placeholder={`Step ${index + 1}`}
-                className="touch-target flex-1 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-800"
-              />
-
-              {/* Points */}
-              <div className="flex items-center gap-1">
-                <input
-                  type="number"
-                  min={0}
-                  value={step.points_value}
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value) || 0;
-                    setSteps((prev) =>
-                      prev.map((s) =>
-                        s.key === step.key ? { ...s, points_value: val } : s,
-                      ),
-                    );
-                  }}
-                  className="touch-target w-14 rounded-lg border border-gray-300 text-center text-sm dark:border-gray-600 dark:bg-gray-800"
-                  title="Points for completing this step"
-                />
-                <span className="text-xs text-gray-400">⭐</span>
-              </div>
-
-              {/* Remove */}
-              <button
-                type="button"
-                onClick={() => removeStep(step.key)}
-                disabled={steps.length <= 1}
-                className="touch-target rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 dark:hover:bg-red-900/20"
-                aria-label="Remove step"
+          {steps.map((step, index) => {
+            const stepDays = step.days_of_week ?? daysOfWeek;
+            const isCustomized = step.days_of_week !== null;
+            return (
+              <div
+                key={step.key}
+                className="rounded-xl border border-transparent bg-gray-50 p-2 dark:bg-gray-800/40"
               >
-                ✕
-              </button>
-            </div>
-          ))}
+                <div className="flex items-center gap-2">
+                  {/* Reorder */}
+                  <div className="flex flex-col">
+                    <button
+                      type="button"
+                      onClick={() => moveStep(index, -1)}
+                      disabled={index === 0}
+                      className="min-h-[22px] min-w-[22px] text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                      aria-label="Move up"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveStep(index, 1)}
+                      disabled={index === steps.length - 1}
+                      className="min-h-[22px] min-w-[22px] text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                      aria-label="Move down"
+                    >
+                      ▼
+                    </button>
+                  </div>
+
+                  {/* Icon */}
+                  <EmojiPicker
+                    value={step.icon}
+                    onChange={(v) => updateStep(step.key, "icon", v)}
+                    placeholder="🪥"
+                    ariaLabel={`Icon for step ${index + 1}`}
+                  />
+
+                  {/* Label */}
+                  <input
+                    type="text"
+                    value={step.label}
+                    onChange={(e) => updateStep(step.key, "label", e.target.value)}
+                    placeholder={`Step ${index + 1}`}
+                    className="touch-target flex-1 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-800"
+                  />
+
+                  {/* Points */}
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      value={step.points_value}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value) || 0;
+                        setSteps((prev) =>
+                          prev.map((s) =>
+                            s.key === step.key ? { ...s, points_value: val } : s,
+                          ),
+                        );
+                      }}
+                      className="touch-target w-14 rounded-lg border border-gray-300 text-center text-sm dark:border-gray-600 dark:bg-gray-800"
+                      title="Points for completing this step"
+                    />
+                    <span className="text-xs text-gray-400">⭐</span>
+                  </div>
+
+                  {/* Remove */}
+                  <button
+                    type="button"
+                    onClick={() => removeStep(step.key)}
+                    disabled={steps.length <= 1}
+                    className="touch-target rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 dark:hover:bg-red-900/20"
+                    aria-label="Remove step"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Per-step day filter — defaults to "every routine day" (chips
+                    match the parent routine's days_of_week). Tap any chip to
+                    narrow this step to specific days only. */}
+                <div className="mt-2 flex items-center gap-2 pl-7 text-xs">
+                  <span className="text-gray-400">On:</span>
+                  <div className="flex gap-1">
+                    {DAYS.map((label, i) => {
+                      const inRoutine = daysOfWeek.includes(i);
+                      const active = stepDays.includes(i);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          disabled={!inRoutine}
+                          onClick={() => toggleStepDay(step.key, i)}
+                          className={`min-h-[28px] min-w-[28px] rounded-md border text-[11px] font-semibold transition ${
+                            !inRoutine
+                              ? "cursor-not-allowed border-gray-200 text-gray-300 dark:border-gray-700 dark:text-gray-600"
+                              : active
+                                ? "border-blue-500 bg-blue-500 text-white"
+                                : "border-gray-300 text-gray-500 hover:border-blue-400 dark:border-gray-600"
+                          }`}
+                          title={
+                            !inRoutine
+                              ? "Add this day at the routine level first"
+                              : undefined
+                          }
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {isCustomized && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSteps((prev) =>
+                          prev.map((s) =>
+                            s.key === step.key ? { ...s, days_of_week: null } : s,
+                          ),
+                        )
+                      }
+                      className="text-[11px] text-gray-400 underline hover:text-gray-600"
+                    >
+                      reset
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         <button

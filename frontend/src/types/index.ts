@@ -41,6 +41,7 @@ export interface RoutineStep {
   icon?: string;
   sort_order: number;
   points_value: number;
+  days_of_week?: number[] | null;
 }
 
 export interface RoutineCompletion {

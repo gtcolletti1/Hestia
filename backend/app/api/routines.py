@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -19,6 +19,11 @@ from app.schemas.routine import (
     RoutineTemplateResponse,
     RoutineUpdate,
     StreakInfo,
+)
+from app.services.routine_window import (
+    applicable_step_ids,
+    compute_current_streak,
+    is_routine_complete_for,
 )
 from app.data.routine_templates import ROUTINE_TEMPLATES
 
@@ -168,6 +173,7 @@ async def create_routine(
             icon=step_data.icon,
             sort_order=step_data.sort_order,
             points_value=step_data.points_value,
+            days_of_week=step_data.days_of_week,
         )
         db.add(step)
 
@@ -224,6 +230,7 @@ async def update_routine(
                 icon=step_data.get("icon"),
                 sort_order=step_data["sort_order"],
                 points_value=step_data.get("points_value", 0),
+                days_of_week=step_data.get("days_of_week"),
             )
             db.add(step)
 
@@ -300,6 +307,7 @@ async def duplicate_routine(
             icon=step.icon,
             sort_order=step.sort_order,
             points_value=step.points_value,
+            days_of_week=step.days_of_week,
         ))
 
     await db.flush()
@@ -387,10 +395,17 @@ async def complete_step(
             )
             db.add(ledger_entry)
 
-    # Check if all steps are done
-    if set(completion.completed_steps) >= step_ids:
+    # Check if all *applicable-today* steps are done. The applicable set
+    # honors per-step days_of_week, so on a Sunday a routine whose
+    # weekday-only "Pack backpack" step isn't checked still counts as done.
+    if is_routine_complete_for(
+        routine, today.weekday(), completion.completed_steps
+    ):
         completion.is_fully_completed = True
         completion.completed_at = datetime.utcnow()
+    else:
+        completion.is_fully_completed = False
+        completion.completed_at = None
 
     await db.flush()
     await db.refresh(completion)
@@ -488,8 +503,11 @@ async def uncomplete_step(
 
         # Removing a step necessarily means the routine is no longer fully
         # completed for today.
-        completion.is_fully_completed = False
-        completion.completed_at = None
+        completion.is_fully_completed = is_routine_complete_for(
+            routine, date.today().weekday(), completion.completed_steps
+        )
+        if not completion.is_fully_completed:
+            completion.completed_at = None
 
     await db.flush()
     await db.refresh(completion)
@@ -506,55 +524,61 @@ async def get_streak(
     db: AsyncSession = Depends(get_db),
     current_profile: Profile = Depends(get_current_profile),
 ) -> StreakInfo:
-    routine = await db.get(Routine, routine_id)
+    routine = (
+        await db.execute(
+            select(Routine)
+            .options(selectinload(Routine.steps))
+            .where(Routine.id == routine_id)
+        )
+    ).scalar_one_or_none()
     if routine is None:
         raise HTTPException(status_code=404, detail="Routine not found")
     if routine.household_id != current_profile.household_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    stmt = (
-        select(RoutineCompletion)
-        .where(
-            RoutineCompletion.routine_id == routine_id,
-            RoutineCompletion.profile_id == profile_id,
-            RoutineCompletion.is_fully_completed.is_(True),
-        )
-        .order_by(RoutineCompletion.date.desc())
-    )
-    result = await db.execute(stmt)
-    completions = result.scalars().all()
-
-    total_completions = len(completions)
-    if total_completions == 0:
-        return StreakInfo(current_streak=0, longest_streak=0, total_completions=0)
-
-    dates = [c.date for c in completions]
-
-    # Calculate current streak (consecutive days ending today or yesterday)
-    current_streak = 0
     today = date.today()
-    expected = today
-    for d in dates:
-        if d == expected:
-            current_streak += 1
-            expected = date.fromordinal(d.toordinal() - 1)
-        elif current_streak == 0 and d == date.fromordinal(today.toordinal() - 1):
-            # Most recent completion was yesterday — start streak from there
-            current_streak = 1
-            expected = date.fromordinal(d.toordinal() - 1)
-        else:
-            break
+    current_streak = await compute_current_streak(db, routine, profile_id, today)
 
-    # Calculate longest streak
-    longest_streak = 1
-    streak = 1
-    for i in range(1, len(dates)):
-        if dates[i].toordinal() == dates[i - 1].toordinal() - 1:
-            streak += 1
-            longest_streak = max(longest_streak, streak)
-        else:
-            streak = 1
+    # Total completions = days where the applicable-step set was satisfied.
+    rows = (
+        await db.execute(
+            select(RoutineCompletion.date, RoutineCompletion.completed_steps).where(
+                RoutineCompletion.routine_id == routine_id,
+                RoutineCompletion.profile_id == profile_id,
+            )
+        )
+    ).all()
+    completed_dates: list[date] = []
+    for d, steps in rows:
+        if is_routine_complete_for(routine, d.weekday(), steps or []):
+            completed_dates.append(d)
+    completed_dates.sort()
+    total_completions = len(completed_dates)
 
+    if total_completions == 0:
+        return StreakInfo(
+            current_streak=current_streak,
+            longest_streak=current_streak,
+            total_completions=0,
+        )
+
+    # Longest streak across the routine's scheduled-day calendar — same
+    # rule as current_streak but window-walk over historical completions.
+    scheduled = set(routine.days_of_week or [])
+    completed_set = set(completed_dates)
+    longest_streak = 0
+    if completed_set and scheduled:
+        cursor = max(completed_dates)
+        earliest = min(completed_dates)
+        run = 0
+        while cursor >= earliest:
+            if cursor.weekday() in scheduled:
+                if cursor in completed_set:
+                    run += 1
+                    longest_streak = max(longest_streak, run)
+                else:
+                    run = 0
+            cursor = cursor - timedelta(days=1)
     longest_streak = max(longest_streak, current_streak)
 
     return StreakInfo(

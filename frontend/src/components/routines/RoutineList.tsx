@@ -25,7 +25,7 @@ function RoutineStreakBadge({
     queryFn: async () =>
       (await routinesApi.getStreak(routineId, profileId)).data,
   });
-  const streak = data?.streak ?? 0;
+  const streak = data?.current_streak ?? 0;
   if (streak <= 0) return null;
   return (
     <span

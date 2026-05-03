@@ -16,9 +16,16 @@ export default function RoutineStepper({ routine, onClose }: Props) {
   const [selectedProfileId, setSelectedProfileId] = useState(
     routine.profile_id ?? profiles[0]?.id ?? "",
   );
+  // Filter steps to those applicable to today's weekday — a step with
+  // a non-empty days_of_week only shows on those days; null/empty means
+  // "every day the routine runs".
+  const todayWeekday = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+  const stepAppliesToday = (s: RoutineStep) =>
+    !s.days_of_week || s.days_of_week.length === 0 || s.days_of_week.includes(todayWeekday);
   const [steps, setSteps] = useState<(RoutineStep & { completed: boolean })[]>(
     () =>
       [...routine.steps]
+        .filter(stepAppliesToday)
         .sort((a, b) => a.sort_order - b.sort_order)
         .map((s) => ({ ...s, completed: false })),
   );
