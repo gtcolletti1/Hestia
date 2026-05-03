@@ -16,6 +16,7 @@ from app.models.calendar import Event, SourceCalendar
 from app.models.calendar import CalendarProvider
 from app.models.routine import Routine, RoutineStep, TimeBlock
 from app.models.user import Household, Profile
+from app.services.routine_window import current_time_block
 
 pytestmark = pytest.mark.asyncio
 
@@ -180,6 +181,7 @@ async def test_dashboard_routines_only_today(
     """Dashboard only shows routines whose days_of_week includes today."""
     today_weekday = date.today().weekday()  # 0=Mon
     other_day = (today_weekday + 1) % 7
+    block_now = current_time_block(datetime.now().time()).value
 
     # Routine for today
     await authed_client.post(
@@ -187,7 +189,7 @@ async def test_dashboard_routines_only_today(
         json={
             "household_id": str(sample_household.id),
             "name": "Today Only",
-            "time_block": "morning",
+            "time_block": block_now,
             "days_of_week": [today_weekday],
             "steps": [{"label": "Do it", "sort_order": 0}],
         },
@@ -199,7 +201,7 @@ async def test_dashboard_routines_only_today(
         json={
             "household_id": str(sample_household.id),
             "name": "Other Day Only",
-            "time_block": "morning",
+            "time_block": block_now,
             "days_of_week": [other_day],
             "steps": [{"label": "Skip it", "sort_order": 0}],
         },
@@ -222,13 +224,14 @@ async def test_dashboard_routine_has_step_count(
 ) -> None:
     """Dashboard routine objects include step_count."""
     today_weekday = date.today().weekday()
+    block_now = current_time_block(datetime.now().time()).value
 
     await authed_client.post(
         "/api/routines",
         json={
             "household_id": str(sample_household.id),
             "name": "Count Test",
-            "time_block": "morning",
+            "time_block": block_now,
             "days_of_week": [today_weekday],
             "steps": [
                 {"label": "A", "sort_order": 0},

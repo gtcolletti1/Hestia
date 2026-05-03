@@ -14,7 +14,7 @@ from app.database import get_db
 from app.models.calendar import Event, SourceCalendar
 from app.models.list import ListItem, TaskList
 from app.models.meal import MealPlan
-from app.models.routine import Routine
+from app.models.routine import Routine, RoutineCompletion
 from sqlalchemy.orm import selectinload
 from app.models.user import Household, Profile
 from app.schemas.dashboard import (
@@ -23,6 +23,10 @@ from app.schemas.dashboard import (
     DashboardResponse,
     EventSummary,
     ProfileSummary,
+)
+from app.services.routine_window import (
+    completed_routine_ids_today,
+    current_time_block,
 )
 
 router = APIRouter(tags=["dashboard"])
@@ -146,20 +150,52 @@ async def get_dashboard(
     ]
 
     # ── Active routines ──────────────────────────────────────────────────
+    # Show only routines for today's weekday + the current time block.
+    # Drop routines already fully completed today so the list reflects
+    # what actually still needs doing.
+    active_block = current_time_block(now.astimezone(local_tz).time())
     routines_result = await db.execute(
         select(Routine)
         .options(selectinload(Routine.steps))
         .where(
             Routine.household_id == household_id,
             Routine.is_active.is_(True),
+            Routine.time_block == active_block,
         )
     )
-    active_routines: list[dict] = []
-    current_time = now.time()
+    todays_routines = [
+        r for r in routines_result.scalars().all()
+        if current_weekday in (r.days_of_week or [])
+    ]
+    completed_ids = await completed_routine_ids_today(db, todays_routines, today)
 
-    for routine in routines_result.scalars().all():
-        if current_weekday not in (routine.days_of_week or []):
+    # Compute consecutive-day streak per routine (only when assigned).
+    active_routines: list[dict] = []
+    for routine in todays_routines:
+        if routine.id in completed_ids:
             continue
+        streak = 0
+        if routine.profile_id is not None:
+            comp_result = await db.execute(
+                select(RoutineCompletion.date)
+                .where(
+                    RoutineCompletion.routine_id == routine.id,
+                    RoutineCompletion.profile_id == routine.profile_id,
+                    RoutineCompletion.is_fully_completed.is_(True),
+                )
+                .order_by(RoutineCompletion.date.desc())
+            )
+            dates = [row[0] for row in comp_result.all()]
+            expected = today
+            for d in dates:
+                if d == expected:
+                    streak += 1
+                    expected = expected - timedelta(days=1)
+                elif streak == 0 and d == today - timedelta(days=1):
+                    streak = 1
+                    expected = d - timedelta(days=1)
+                else:
+                    break
         active_routines.append(
             {
                 "id": str(routine.id),
@@ -167,6 +203,7 @@ async def get_dashboard(
                 "time_block": routine.time_block.value,
                 "profile_id": str(routine.profile_id) if routine.profile_id else None,
                 "step_count": len(routine.steps),
+                "streak_days": streak,
             }
         )
 

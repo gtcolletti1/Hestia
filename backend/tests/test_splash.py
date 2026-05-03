@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.calendar import CalendarProvider, Event, SourceCalendar
 from app.models.note import Note
 from app.models.routine import Routine, TimeBlock
+from app.services.routine_window import current_time_block
 from app.models.user import Household, Profile
 
 pytestmark = pytest.mark.asyncio
@@ -237,11 +238,12 @@ async def test_show_routines_toggle(
     sample_household: Household,
     sample_profile: Profile,
 ) -> None:
+    block_now = current_time_block(datetime.now().time())
     routine = Routine(
         household_id=sample_household.id,
         profile_id=sample_profile.id,
         name="Morning Routine",
-        time_block=TimeBlock.morning,
+        time_block=block_now,
         days_of_week=[0, 1, 2, 3, 4, 5, 6],  # every day
         is_active=True,
     )
@@ -264,7 +266,7 @@ async def test_show_routines_toggle(
     assert morning["assignee"]["color"] == sample_profile.color
     assert "step_count" in morning
     assert "streak_days" in morning
-    assert morning["time_block"] == "morning"
+    assert morning["time_block"] == block_now.value
 
     # OFF
     await _set_settings(db_session, sample_household, splash_show_routines=False)
@@ -275,6 +277,85 @@ async def test_show_routines_toggle(
     assert body["routines"] is None
     # Routine name must not leak.
     assert "Morning Routine" not in resp.text
+
+
+async def test_completed_routine_hidden_from_splash(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    sample_household: Household,
+    sample_profile: Profile,
+) -> None:
+    """A routine fully completed today must not appear on the splash."""
+    from app.models.routine import RoutineCompletion
+    block_now = current_time_block(datetime.now().time())
+    routine = Routine(
+        household_id=sample_household.id,
+        profile_id=sample_profile.id,
+        name="Vanish When Done",
+        time_block=block_now,
+        days_of_week=[0, 1, 2, 3, 4, 5, 6],
+        is_active=True,
+    )
+    db_session.add(routine)
+    await db_session.flush()
+
+    await _set_settings(db_session, sample_household, splash_show_routines=True)
+
+    # Before completion: visible.
+    resp = await async_client.get(
+        "/api/splash", params={"household_id": str(sample_household.id)}
+    )
+    assert any(
+        r["name"] == "Vanish When Done" for r in resp.json()["routines"]
+    )
+
+    # Mark fully completed today.
+    db_session.add(
+        RoutineCompletion(
+            routine_id=routine.id,
+            profile_id=sample_profile.id,
+            date=dt.date.today(),
+            completed_steps=[],
+            is_fully_completed=True,
+        )
+    )
+    await db_session.commit()
+
+    resp = await async_client.get(
+        "/api/splash", params={"household_id": str(sample_household.id)}
+    )
+    assert not any(
+        r["name"] == "Vanish When Done" for r in resp.json()["routines"]
+    )
+
+
+async def test_other_time_block_routine_hidden_from_splash(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    sample_household: Household,
+    sample_profile: Profile,
+) -> None:
+    """Routines not in the current time block are excluded from splash."""
+    block_now = current_time_block(datetime.now().time())
+    other_block = TimeBlock.bedtime if block_now != TimeBlock.bedtime else TimeBlock.morning
+    db_session.add(
+        Routine(
+            household_id=sample_household.id,
+            profile_id=sample_profile.id,
+            name="Other Block",
+            time_block=other_block,
+            days_of_week=[0, 1, 2, 3, 4, 5, 6],
+            is_active=True,
+        )
+    )
+    await db_session.flush()
+    await _set_settings(db_session, sample_household, splash_show_routines=True)
+
+    resp = await async_client.get(
+        "/api/splash", params={"household_id": str(sample_household.id)}
+    )
+    names = [r["name"] for r in resp.json()["routines"] or []]
+    assert "Other Block" not in names
 
 
 async def test_show_messages_toggle_hides_pinned_notes(

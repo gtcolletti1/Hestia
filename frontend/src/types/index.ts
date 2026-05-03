@@ -107,6 +107,7 @@ export interface DashboardRoutine {
   time_block: "morning" | "afternoon" | "evening" | "bedtime";
   profile_id?: string | null;
   step_count: number;
+  streak_days?: number;
 }
 
 export interface DashboardData {

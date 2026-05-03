@@ -26,6 +26,10 @@ from app.models.note import Note
 from app.models.routine import Routine, RoutineCompletion
 from app.models.user import Household, Profile
 from app.schemas.admin import HouseholdSettings
+from app.services.routine_window import (
+    completed_routine_ids_today,
+    current_time_block,
+)
 from app.schemas.splash import (
     SplashClock,
     SplashDay,
@@ -200,6 +204,7 @@ async def _build_routines(
     household_id: uuid.UUID,
     today: date,
     current_weekday: int,
+    active_block,
 ) -> list[SplashRoutine]:
     routines_result = await db.execute(
         select(Routine)
@@ -207,12 +212,16 @@ async def _build_routines(
         .where(
             Routine.household_id == household_id,
             Routine.is_active.is_(True),
+            Routine.time_block == active_block,
         )
     )
-    routines = [
+    todays_routines = [
         r for r in routines_result.scalars().all()
         if current_weekday in (r.days_of_week or [])
     ]
+
+    completed_ids = await completed_routine_ids_today(db, todays_routines, today)
+    routines = [r for r in todays_routines if r.id not in completed_ids]
 
     # One streak query per active routine. The set of "today" routines
     # is small (usually < 10) so the N+1 is acceptable; if it grows we
@@ -349,7 +358,10 @@ async def get_splash(
 
     routines: list[SplashRoutine] | None = None
     if settings.splash_show_routines:
-        routines = await _build_routines(db, household.id, today, current_weekday)
+        active_block = current_time_block(now_local.time())
+        routines = await _build_routines(
+            db, household.id, today, current_weekday, active_block
+        )
 
     meals: list[SplashMeal] | None = None
     if settings.splash_show_meals:

@@ -128,6 +128,14 @@ function RoutinesWidget({ routines }: { routines: DashboardRoutine[] }) {
                   {r.step_count} step{r.step_count !== 1 ? "s" : ""}
                 </p>
               </div>
+              {(r.streak_days ?? 0) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+                  title={`${r.streak_days}-day streak`}
+                >
+                  🔥 {r.streak_days}
+                </span>
+              )}
             </li>
           ))}
         </ul>

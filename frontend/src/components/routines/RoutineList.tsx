@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { routines as routinesApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
+import { useAuthStore } from "@/stores/authStore";
 import type { Routine, RoutineStep, RoutineTemplate } from "@/types";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
@@ -11,6 +12,30 @@ import RoutineForm from "./RoutineForm";
 import TemplatePicker from "./TemplatePicker";
 
 export type { Routine, RoutineStep };
+
+function RoutineStreakBadge({
+  routineId,
+  profileId,
+}: {
+  routineId: string;
+  profileId: string;
+}) {
+  const { data } = useQuery({
+    queryKey: ["routine-streak", routineId, profileId],
+    queryFn: async () =>
+      (await routinesApi.getStreak(routineId, profileId)).data,
+  });
+  const streak = data?.streak ?? 0;
+  if (streak <= 0) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+      title={`${streak}-day streak`}
+    >
+      🔥 {streak}
+    </span>
+  );
+}
 
 type TimeBlock = Routine["time_block"];
 
@@ -36,6 +61,9 @@ export default function RoutineList() {
   const queryClient = useQueryClient();
   const householdId = useHouseholdStore((s) => s.householdId);
   const storeProfiles = useHouseholdStore((s) => s.profiles);
+  const currentProfile = useAuthStore((s) => s.profile);
+  const isAdmin = currentProfile?.role === "admin";
+  const [showAllForAdmin, setShowAllForAdmin] = useState(false);
   const [selectedRoutine, setSelectedRoutine] = useState<Routine | null>(null);
   const [modalMode, setModalMode] = useState<
     "closed" | "picker" | "create" | "edit"
@@ -55,6 +83,18 @@ export default function RoutineList() {
     queryFn: async () => (await routinesApi.getAll(householdId!)).data,
     enabled: !!householdId,
   });
+
+  // Visibility scoping: by default a logged-in profile sees only their own
+  // routines plus shared "Household" (unassigned) routines so each kid's
+  // tab stays personal. Admins get a toggle to manage everyone's routines.
+  const showAll = isAdmin && showAllForAdmin;
+  const visibleRoutines = showAll
+    ? routines
+    : routines.filter(
+        (r) =>
+          r.profile_id == null ||
+          (currentProfile != null && r.profile_id === currentProfile.id),
+      );
 
   const toggleMutation = useMutation({
     mutationFn: (routine: Routine) =>
@@ -78,7 +118,7 @@ export default function RoutineList() {
     (block) => ({
       block,
       ...TIME_BLOCK_META[block],
-      routines: routines.filter((r) => r.time_block === block),
+      routines: visibleRoutines.filter((r) => r.time_block === block),
     }),
   );
 
@@ -100,12 +140,25 @@ export default function RoutineList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Routines</h1>
-        <button
-          onClick={() => setModalMode("picker")}
-          className="touch-target rounded-xl bg-[var(--color-accent,theme(colors.blue.600))] px-5 py-2 font-semibold text-white shadow transition hover:opacity-90 active:scale-95"
-        >
-          + Add Routine
-        </button>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded"
+                checked={showAllForAdmin}
+                onChange={(e) => setShowAllForAdmin(e.target.checked)}
+              />
+              Show all household routines
+            </label>
+          )}
+          <button
+            onClick={() => setModalMode("picker")}
+            className="touch-target rounded-xl bg-[var(--color-accent,theme(colors.blue.600))] px-5 py-2 font-semibold text-white shadow transition hover:opacity-90 active:scale-95"
+          >
+            + Add Routine
+          </button>
+        </div>
       </div>
 
       {isLoading && <LoadingSpinner message="Loading routines…" />}
@@ -225,10 +278,18 @@ export default function RoutineList() {
                     </div>
 
                     <div className="mt-3 flex items-center justify-between">
-                      <span className="text-xs text-gray-400 dark:text-gray-500">
-                        {routine.steps.length} step
-                        {routine.steps.length !== 1 ? "s" : ""}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                          {routine.steps.length} step
+                          {routine.steps.length !== 1 ? "s" : ""}
+                        </span>
+                        {routine.profile_id && (
+                          <RoutineStreakBadge
+                            routineId={routine.id}
+                            profileId={routine.profile_id}
+                          />
+                        )}
+                      </div>
                       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         <button
                           onClick={(e) => {
