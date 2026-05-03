@@ -65,6 +65,7 @@ from app.api import notes  # noqa: E402
 from app.api import notifications  # noqa: E402
 from app.api import rewards  # noqa: E402
 from app.api import setup as setup_api  # noqa: E402
+from app.api import splash  # noqa: E402
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(meals.router, prefix="/api")
@@ -76,3 +77,4 @@ app.include_router(notes.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(rewards.router, prefix="/api")
 app.include_router(setup_api.router, prefix="/api")
+app.include_router(splash.router, prefix="/api")

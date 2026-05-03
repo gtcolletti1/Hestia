@@ -26,7 +26,12 @@ async def test_get_default_settings(
 
     assert body["name"] == sample_household.name
     assert body["theme"] == "light"
-    assert body["privacy_mode"] is False
+    assert body["splash_calendar_mode"] == "off"
+    assert body["splash_mode"] == "ambient"
+    assert body["splash_agenda_max_days"] == 3
+    assert body["splash_show_routines"] is True
+    assert body["splash_show_meals"] is False
+    assert "privacy_mode" not in body
     assert body["time_format"] == "12h"
     assert body["modules_enabled"]["calendar"] is True
     assert body["modules_enabled"]["routines"] is True

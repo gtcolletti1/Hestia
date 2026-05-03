@@ -296,3 +296,21 @@ async def get_me(profile: Profile = Depends(get_current_profile)):
         household_id=str(profile.household_id),
         pin_set=profile.pin_hash is not None,
     )
+
+
+@router.post("/lock", status_code=status.HTTP_204_NO_CONTENT)
+async def lock(_: Profile = Depends(get_current_profile)) -> None:
+    """Logout the current profile and return the device to the splash.
+
+    Powers the "Lock now" header action (PRD US-2.12.6). The JWT used
+    by Hestia is stateless, so server-side invalidation isn't possible
+    without a denylist; the client clears its local token on receipt
+    of 204. Requiring a valid token here ensures the action is only
+    available to genuinely-logged-in callers (no DoS-by-stranger),
+    while keeping the implementation honest about its semantics: this
+    is a *signal*, not a token-revocation primitive.
+
+    If we ever add a server-side token denylist, this endpoint is the
+    single place to record the revocation.
+    """
+    return None
