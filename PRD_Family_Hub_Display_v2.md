@@ -1,8 +1,8 @@
-# Family Hub Display — Product Requirements Document v2
+# Hestia — Product Requirements Document v2
 
-> **Working title:** Family Hub Display
-> **Version:** 2.0
-> **Last updated:** 2026-04-19
+> **Product name:** Hestia (formerly "Family Hub Display")
+> **Version:** 2.1
+> **Last updated:** 2026-05-03
 > **Status:** Draft
 
 ---
@@ -11,7 +11,7 @@
 
 ### 1.1 Vision
 
-Family Hub Display is a self-hosted, wall-mounted family command center — a free, privacy-first alternative to commercial products like Skylight Calendar and Hearth Display. It runs on affordable hardware (NUC, Raspberry Pi, or any Docker host) with a touch display, giving families an always-on shared view of their schedules, routines, meals, lists, and memories without requiring a cloud subscription or sending data to third parties.
+Hestia is a self-hosted, wall-mounted family command center — a free, privacy-first alternative to commercial products like Skylight Calendar and Hearth Display. It runs on affordable hardware (NUC, Raspberry Pi, or any Docker host) with a touch display, giving families an always-on shared view of their schedules, routines, meals, lists, and memories without requiring a cloud subscription or sending data to third parties.
 
 ### 1.2 Target Users
 
@@ -71,13 +71,15 @@ The right sidebar displays:
 **US-2.2.2: Event Management**
 - Create events with: title (required), start time, end time, location, description, assigned profile, source calendar, color, and all-day flag.
 - Edit and delete events.
-- Recurring events use RRULE (RFC 5545); the system expands occurrences for display.
+- Recurring events use RRULE (RFC 5545); the system expands occurrences for display and honors per-occurrence overrides via `RECURRENCE-ID` and exclusions via `EXDATE`.
+- All-day and multi-day events render in a banner row above the timed grid in Day/Week views, and are repeated on every day they span.
 - Events are filterable by profile and source calendar.
 
 **US-2.2.3: External Calendar Sync**
 - **Google Calendar:** OAuth 2.0 flow via admin settings. Select which Google calendars to sync. Two-way sync where permissions allow.
-- **Apple/iCal:** subscribe via CalDAV URL or `.ics` feed (read-only).
+- **Apple/iCal:** subscribe via CalDAV URL or `.ics` feed (read-only). Lightweight `.ics` subscriptions require no OAuth.
 - **Outlook/Exchange:** Microsoft Graph OAuth 2.0 (read-only initially, two-way in Phase 2).
+- iCal `TZID` values are honored when expanding occurrences (no naive-UTC drift).
 - Sync runs on a configurable interval (default: every 15 minutes via Celery beat).
 - Last-synced timestamp displayed per calendar in admin settings.
 - Sync failures are logged and retried (max 3 retries with exponential backoff).
@@ -85,7 +87,8 @@ The right sidebar displays:
 **Done means:** a Google Calendar event created on a phone appears on the display within 15 minutes. A local event created on the display appears on the phone within 15 minutes (if two-way).
 
 **US-2.2.4: Privacy Mode**
-- When enabled, event details on the wall display are replaced with "Busy" and the person's color. Tapping reveals details only after PIN entry.
+- When enabled, event details on the wall display are replaced with "Busy" and the person's color across the **Dashboard agenda, Calendar (Day/Week/Month/Agenda)**, and **Meals** views.
+- Tapping an obscured item reveals details only after admin PIN entry; the reveal is scoped to the current view and clears on navigation away or screensaver.
 
 ### 2.3 Routines & Chores
 
@@ -109,7 +112,7 @@ Each **step** has:
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | label | string | ✓ | e.g., "Brush teeth" |
-| icon | string | ✗ | Emoji or icon identifier |
+| icon | string | ✗ | Emoji or icon identifier (curated emoji picker available in the editor) |
 | points_value | integer | ✓ | Points earned on completion (0 = no points) |
 | sort_order | integer | ✓ | Display order |
 
@@ -119,6 +122,7 @@ Each **step** has:
 - Each step shows the icon, label, and a checkmark. Tapping marks it complete.
 - Completing a step with `points_value > 0` immediately credits points to the logged-in profile's ledger.
 - Points are **idempotent** per step per day — completing the same step again does not double-award.
+- **Unchecking** a previously completed step does NOT refund points and does NOT permit re-awarding on subsequent re-check (no point farming).
 - Completing all steps marks the routine as fully completed for that day.
 
 **US-2.3.3: Streaks**
@@ -127,9 +131,11 @@ Each **step** has:
 - A missed scheduled day resets the streak to 0.
 
 **US-2.3.4: Routine Management**
-- Admin/parent profiles can create, edit, and delete routines.
-- Edit and delete actions are accessible from the routine list (edit pencil icon, delete trash icon).
+- Admin/parent profiles can create, edit, delete, and **duplicate** routines.
+- Edit, delete, and duplicate actions are accessible from the routine list (edit pencil, trash, copy icons).
+- Duplicating creates a deep copy (steps included) with " (copy)" appended to the name; the copy is independent and editable.
 - Deleting a routine prompts confirmation and cascades to steps and completion history.
+- **Routine templates:** a curated set of pre-built templates (Morning, After-School, Bedtime, Tidy-Up) is available from the "New routine" flow; selecting a template seeds name, time block, days, and steps which the admin can then customize.
 
 **Done means:** a routine with days_of_week=[0,1,2,3,4] (weekdays) does NOT appear on the dashboard on Saturday/Sunday. A 5-point step completed by a child immediately shows +5 in their point balance.
 
@@ -162,7 +168,7 @@ Each **step** has:
 > *"As a parent, I add groceries to the list from my phone; the display shows it immediately."*
 
 **US-2.5.1: List Management**
-- Create lists with: name, category (grocery, todo, packing, school, errands, custom), icon.
+- Create lists with: name, category (grocery, todo, packing, school, errands, other, custom), icon.
 - Lists can be archived (hidden from dashboard but not deleted).
 - Reorder lists by drag or sort_order.
 
@@ -222,13 +228,15 @@ Each **step** has:
 **US-2.8.2: Screensaver Behavior**
 - After N minutes of inactivity (configurable, default 5), the display enters screensaver mode.
 - Photos cycle with a configurable transition interval (default 30 seconds).
+- If no photos are configured, a Hestia hearth-flame splash is shown as a fallback.
 - Touching the screen exits screensaver and returns to the last-viewed page.
+- Entering the screensaver **auto-logs-out** the active profile; the next interaction lands on the profile selector.
 
 **US-2.8.3: Settings**
 - `screensaver_timeout_minutes`: 1–60 (default 5)
 - `screensaver_transition_seconds`: 5–120 (default 30)
 
-**Done means:** after 5 minutes idle, photos begin cycling. Tapping the screen returns to the dashboard instantly.
+**Done means:** after 5 minutes idle, photos begin cycling (or the Hestia splash if none). Tapping the screen returns to the profile selector and requires re-auth.
 
 ### 2.9 Profiles & Authentication
 
@@ -238,20 +246,24 @@ Each **step** has:
 - Create profiles with: name, color (hex), avatar_url (optional), role (admin/standard).
 - Admin profiles can manage all settings, integrations, and other profiles.
 - Standard profiles can view everything and interact with routines, lists, and notes.
+- Non-admin profiles can edit only their **own** profile (name, color, avatar, PIN); admin profiles can edit any.
 - Profiles can be deactivated (soft delete) — hidden from UI but preserved in history.
+- Avatars: when `avatar_url` is set, the ProfileSelector and header dropdown render the image; otherwise the first initial on the profile's color chip is shown.
 
 **US-2.9.2: Authentication**
 - Login by tapping a profile avatar on the login screen.
-- Optional PIN (4-digit) for admin profiles; stored as bcrypt hash.
-- Empty PIN = no PIN required (default for kids/caregivers).
-- JWT Bearer tokens with configurable expiry.
-- Auth interceptor automatically logs out on 401 responses.
+- **Admin profiles require a 4-digit PIN** (no empty/blank PIN allowed); creation and PIN changes always bcrypt-hash and persist server-side.
+- Standard profiles may have an optional PIN (default: none for kids/caregivers).
+- JWT Bearer tokens with configurable expiry; auth interceptor automatically logs out on 401 responses.
+- A profile switcher dropdown in the header bar lets the active user switch profiles without returning to the login screen; the active profile is persisted across page refreshes.
+- Entering the screensaver triggers an automatic logout (see US-2.8.2).
 
-**US-2.9.3: Onboarding**
-- First launch: create a household (name), then create the first admin profile.
-- Subsequent profiles added via the Profiles page (accessible from bottom nav).
+**US-2.9.3: Onboarding (Single-Household Appliance)**
+- Hestia is a **single-household** appliance: exactly one household exists per deployment.
+- First boot: the server exposes `/setup/discover` so the kiosk/companion device can locate the appliance on the LAN; the setup wizard then collects the household name and creates the **first admin profile with a required PIN** (PIN-on-create).
+- Once a household exists, household-creation and unrestricted profile-creation endpoints are gated: only an authenticated admin can add subsequent profiles via the Profiles page (accessible from bottom nav).
 
-**Done means:** a new household starts with zero profiles. The first profile created is automatically admin. A PIN-protected profile requires the PIN to log in; a profile without a PIN logs in on tap.
+**Done means:** a fresh appliance boots into the setup wizard via `/setup/discover`. The first profile created is admin and must set a PIN. Attempts to create a second household are rejected. A standard profile cannot edit another profile's record.
 
 ### 2.10 Weather Widget
 
@@ -259,8 +271,8 @@ Each **step** has:
 
 **US-2.10.1: Weather Display**
 - Shows current conditions (icon, temperature, description) and today's high/low.
-- Data fetched from a free weather API (Open-Meteo or similar).
-- Requires location (latitude/longitude) configured in household settings.
+- Data fetched from **Open-Meteo** (no API key required).
+- Requires location (latitude/longitude) configured in household settings; a "Use my location" button in settings auto-fills lat/lon via the browser Geolocation API.
 - Refreshes every 30 minutes.
 - Gracefully hidden when location is not configured (no error shown on dashboard).
 
@@ -304,9 +316,13 @@ Stored as a JSON object on the household record:
   "privacy_mode": false,
   "weather_lat": null,
   "weather_lon": null,
-  "weather_units": "imperial"
+  "weather_units": "imperial",
+  "timezone": "America/New_York",
+  "time_format": "12h"
 }
 ```
+
+The household `timezone` (IANA name) is the **primary source of truth** for date-bucketing on the dashboard agenda, routine "today" matching, and meal-plan "today" lookups. `time_format` controls 12h/24h rendering throughout the UI.
 
 ### 3.2 Module Toggles
 
@@ -354,7 +370,7 @@ Household
 | CalendarProvider | local, google, apple, microsoft |
 | TimeBlock | morning, afternoon, evening, bedtime |
 | MealType | breakfast, lunch, dinner, snack |
-| ListCategory | grocery, todo, packing, school, errands, custom |
+| ListCategory | grocery, todo, packing, school, errands, other, custom |
 | SyncAction | create, update, delete |
 | SyncStatus | pending, processing, completed, failed |
 
@@ -364,7 +380,7 @@ Household
 - `MealPlan`: unique on (household_id, date, meal_type) — one meal per type per day.
 - `PointLedger`: append-only, no updates or deletes.
 - All UUIDs are v4, generated client-side or server-side.
-- All timestamps are **naive UTC** (`TIMESTAMP WITHOUT TIME ZONE`) in PostgreSQL. Frontend converts to local time for display.
+- All timestamps are **naive UTC** (`TIMESTAMP WITHOUT TIME ZONE`) in PostgreSQL. Frontend and "today"-bucket logic convert to the household timezone (see §3.1) for display.
 
 ---
 
@@ -470,9 +486,9 @@ Household
 - Calendar sync completes within 30 seconds per source calendar.
 
 ### 7.2 Reliability
-- Docker healthchecks on all services; `restart: unless-stopped`.
+- Database healthchecks on all services; `restart: unless-stopped`.
 - Celery retries sync failures with exponential backoff (max 3 retries).
-- Database migrations via Alembic — no manual SQL.
+- Database migrations via Alembic — Alembic is the **single source of truth** for schema; no manual SQL or `create_all()` in production.
 
 ### 7.3 Accessibility / Touch UX
 - All interactive elements are minimum 44×44px (WCAG touch target).
@@ -483,7 +499,7 @@ Household
 ### 7.4 Security
 - All data stored locally (PostgreSQL on Docker volume).
 - HTTPS/TLS for external API calls.
-- OAuth tokens encrypted at rest (application-level encryption, Phase 2).
+- OAuth tokens encrypted at rest via an `EncryptedString` SQLAlchemy `TypeDecorator` (application-level encryption).
 - PINs stored as bcrypt hashes.
 - No data sent to third parties except explicit calendar sync providers.
 
@@ -519,15 +535,24 @@ Every screen must handle these gracefully:
 
 ### Phase 1 — MVP (Current)
 - [x] Local web app with dashboard, profiles, routines, lists, meals, notes
-- [x] Local calendar with day/week/month views and recurring events (RRULE)
+- [x] Local calendar with day/week/month views and recurring events (RRULE, including `RECURRENCE-ID` overrides and `EXDATE`)
+- [x] All-day & multi-day event banner row above the timed grid
 - [x] Read-only Google Calendar sync (OAuth 2.0)
-- [x] Kid-friendly routine stepper with points and streaks
+- [x] Lightweight `.ics` calendar subscriptions (no OAuth)
+- [x] Kid-friendly routine stepper with points, streaks, and anti-farming on uncheck
+- [x] Routine duplication and pre-built templates (morning/after-school/bedtime/tidy-up)
+- [x] Curated emoji picker for routine step icons
 - [x] Rewards store with point redemption and leaderboard
-- [x] Photo screensaver with configurable timeout/transition
+- [x] Photo screensaver with configurable timeout/transition and Hestia splash fallback
+- [x] Auto-logout on screensaver entry
 - [x] Message board with pinned notes
-- [x] Weather widget
-- [x] Admin settings (theme, modules, screensaver, privacy mode)
-- [x] PIN-based authentication
+- [x] Weather widget (Open-Meteo, geolocation autofill)
+- [x] Admin settings (theme, modules, screensaver, privacy mode, timezone, 12h/24h)
+- [x] Privacy mode across Dashboard, Calendar, and Meals with PIN-gated reveal
+- [x] PIN-based authentication; admin PIN required; PIN-on-create
+- [x] Single-household appliance with `/setup/discover` boot flow
+- [x] Profile switcher in header; active profile persists across refreshes
+- [x] OAuth tokens encrypted at rest (EncryptedString TypeDecorator)
 - [x] Docker Compose deployment
 - [x] Touch-friendly AM/PM time picker
 
@@ -539,8 +564,6 @@ Every screen must handle these gracefully:
 - [ ] Drag-and-drop reordering for list items and routine steps
 - [ ] Photo integration with Google Photos album
 - [ ] Export/import household data (JSON backup)
-- [ ] OAuth token encryption at rest
-- [ ] Routine templates (pre-built morning/bedtime/after-school)
 - [ ] Chore assignment per profile (not just household-wide)
 - [ ] Notification bell on dashboard with badge count
 
@@ -561,7 +584,7 @@ Every screen must handle these gracefully:
 
 | Term | Definition |
 |------|-----------|
-| **Household** | A family unit; the top-level tenant. All data is scoped to a household. |
+| **Household** | A family unit; the top-level (and, in this single-household appliance, only) tenant. All data is scoped to a household. |
 | **Profile** | A person within a household (parent, child, caregiver). |
 | **Source Calendar** | A calendar feed (local or synced from Google/Apple/Outlook). |
 | **Time Block** | A named period of the day (morning, afternoon, evening, bedtime) used to group routines. |
