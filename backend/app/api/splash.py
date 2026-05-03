@@ -359,18 +359,54 @@ async def get_splash(
     if settings.splash_show_messages:
         messages = await _build_messages(db, household.id)
 
-    # Weather: we surface only metadata + the configured units. The
-    # actual fetch happens in the existing /api/weather route which the
-    # frontend can call directly. The splash response telegraphs whether
-    # the section is enabled and configured so the client knows whether
-    # to render anything at all.
+    # Weather: when configured, we fetch live conditions server-side
+    # so the splash doesn't need a second (authenticated) round-trip
+    # to /api/weather. Failures are swallowed to a "available=false"
+    # state — we never want a flaky upstream to break the splash.
     weather = None
     if settings.splash_show_weather:
         from app.schemas.splash import SplashWeather  # local import avoids cycles
+        configured = (
+            settings.weather_lat is not None and settings.weather_lon is not None
+        )
         weather = SplashWeather(
-            available=settings.weather_lat is not None and settings.weather_lon is not None,
+            available=configured,
             units=settings.weather_units,
         )
+        if configured:
+            from app.integrations.weather import WeatherClient
+            client = WeatherClient()
+            try:
+                fc = await client.get_forecast(
+                    float(settings.weather_lat), float(settings.weather_lon),
+                )
+                temp_c = fc.get("temp")
+                today_fc = (fc.get("forecast") or [{}])[0]
+                hi_c = today_fc.get("high")
+                lo_c = today_fc.get("low")
+                # Open-Meteo returns Celsius; convert when household
+                # is on imperial units. The /api/weather route does
+                # the same conversion client-side.
+                def _to_unit(v):
+                    if v is None:
+                        return None
+                    return v * 9 / 5 + 32 if settings.weather_units == "imperial" else v
+                weather = SplashWeather(
+                    available=True,
+                    units=settings.weather_units,
+                    current_temp=_to_unit(temp_c),
+                    high=_to_unit(hi_c),
+                    low=_to_unit(lo_c),
+                    description=fc.get("description"),
+                    icon=fc.get("icon"),
+                )
+            except Exception:
+                # Keep available=True so the section still renders a
+                # placeholder; the client will hide it when the temp
+                # is None.
+                pass
+            finally:
+                await client.close()
 
     response.headers["Cache-Control"] = "public, max-age=30"
 

@@ -39,10 +39,10 @@ export default function SplashContent({ data, timeFormat }: SplashContentProps) 
   const hasMessages = messages !== null && messages.length > 0;
 
   return (
-    <div className="relative flex h-full w-full flex-col gap-5 p-6 sm:p-8 text-[color:var(--splash-text)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
+    <div className="relative flex h-full w-full flex-col gap-4 px-6 sm:px-8 pt-[38vh] pb-6 text-[color:var(--splash-text)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
       <ClockHeader iso={clock.iso_now} timeFormat={timeFormat} weather={weather} showWeather={hasWeather} />
 
-      <div className="grid flex-1 min-h-0 grid-cols-1 gap-5 lg:grid-cols-3">
+      <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Agenda spans 2/3 on wide screens — it's the most info-dense
             section and the one most likely to need viewport spill. */}
         {hasAgenda && (
@@ -52,7 +52,7 @@ export default function SplashContent({ data, timeFormat }: SplashContentProps) 
           </SplashCard>
         )}
 
-        <div className="flex min-h-0 flex-col gap-5">
+        <div className="flex min-h-0 flex-col gap-4">
           {hasRoutines && (
             <SplashCard className="min-h-0 flex flex-col">
               <SectionHeading icon="✨" label="Today's Routines" />
@@ -140,14 +140,14 @@ function ClockHeader({ iso, timeFormat, weather, showWeather }: ClockHeaderProps
   return (
     <header className="flex items-end justify-between gap-6">
       <div>
-        <div className="text-[clamp(4rem,12vw,9rem)] font-light leading-none tabular-nums tracking-tight">
+        <div className="text-[clamp(3rem,8vw,6rem)] font-light leading-none tabular-nums tracking-tight">
           {formatTime(now, "h:mm", timeFormat)}
         </div>
-        <div className="mt-2 text-[clamp(1.25rem,2.5vw,2rem)] font-light text-[color:var(--splash-text-muted)]">
+        <div className="mt-1 text-[clamp(1rem,2vw,1.5rem)] font-light text-[color:var(--splash-text-muted)]">
           {format(now, "EEEE, MMMM d")}
         </div>
       </div>
-      {showWeather && weather && <WeatherBlock weather={weather} />}
+      {showWeather && weather && weather.current_temp !== null && <WeatherBlock weather={weather} />}
     </header>
   );
 }
@@ -157,10 +157,10 @@ function WeatherBlock({ weather }: { weather: SplashWeather }) {
   return (
     <div className="text-right">
       <div className="text-[clamp(2.5rem,6vw,5rem)] font-light leading-none tabular-nums">
-        {weather.temperature !== null ? `${Math.round(weather.temperature)}${unit}` : "—"}
+        {weather.current_temp !== null ? `${Math.round(weather.current_temp)}${unit}` : "—"}
       </div>
       <div className="mt-1 text-base text-[color:var(--splash-text-muted)] capitalize">
-        {weather.condition ?? ""}
+        {weather.description ?? ""}
         {weather.high !== null && weather.low !== null && (
           <span className="ml-2 tabular-nums">
             ↑{Math.round(weather.high)}° ↓{Math.round(weather.low)}°

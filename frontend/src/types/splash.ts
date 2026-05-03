@@ -73,11 +73,12 @@ export interface SplashMessage {
 
 export interface SplashWeather {
   available: boolean;
-  temperature: number | null;
-  units: "imperial" | "metric";
-  condition: string | null;
+  units: "imperial" | "metric" | null;
+  current_temp: number | null;
   high: number | null;
   low: number | null;
+  description: string | null;
+  icon: string | null;
 }
 
 export interface SplashPolicy {
