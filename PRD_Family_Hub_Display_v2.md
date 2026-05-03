@@ -1,7 +1,7 @@
 # Hestia — Product Requirements Document v2
 
 > **Product name:** Hestia (formerly "Family Hub Display")
-> **Version:** 2.1
+> **Version:** 2.2
 > **Last updated:** 2026-05-03
 > **Status:** Draft
 
@@ -86,9 +86,10 @@ The right sidebar displays:
 
 **Done means:** a Google Calendar event created on a phone appears on the display within 15 minutes. A local event created on the display appears on the phone within 15 minutes (if two-way).
 
-**US-2.2.4: Privacy Mode**
-- When enabled, event details on the wall display are replaced with "Busy" and the person's color across the **Dashboard agenda, Calendar (Day/Week/Month/Agenda)**, and **Meals** views.
-- Tapping an obscured item reveals details only after admin PIN entry; the reveal is scoped to the current view and clears on navigation away or screensaver.
+**US-2.2.4: Privacy Mode → Pre-Login Disclosure Policy**
+- Privacy mode is **not** a post-login obfuscation. Logged-in profiles always see the full details they are authorized to see.
+- Disclosure of family schedule data to **unauthenticated** viewers (passersby, the room) is governed by the admin-controlled **pre-login privacy policy** that runs on the splash. See **§2.12 Splash & Pre-Login Privacy** for the calendar disclosure modes (`off` / `busy_only` / `hidden`) and per-section toggles.
+- A logged-in user can manually return the device to the splash at any time via the **"Lock now"** action (see US-2.12.6).
 
 ### 2.3 Routines & Chores
 
@@ -289,6 +290,78 @@ Each **step** has:
 - API endpoint returns notifications due in the next 24 hours.
 - Dashboard could show a notification bell with count (Phase 2).
 
+### 2.12 Splash & Pre-Login Privacy
+
+> *"As a parent, I want anyone in the room to see what's coming up today — but I decide how much of our calendar a stranger gets to read."*
+
+The splash is the device's pre-login ambient view. It replaces the previous post-login privacy mode with an admin-controlled disclosure policy applied **server-side**: the splash client never receives data the policy hides.
+
+**US-2.12.1: Splash Modes**
+The admin selects a splash mode from settings:
+- **Ambient agenda** (default if any agenda content exists) — shows agenda + routines per the privacy policy below.
+- **Photo frame** — photos cycle as today (US-2.8.2); if no photos are configured, the Hestia hearth-flame splash is the fallback.
+- **Alternating** — cycles between Ambient and Photo. Two settings: `splash_alternating_ambient_seconds` and `splash_alternating_photo_seconds` (each 10–600, defaults 60 / 60).
+
+A touch on the splash interrupts the active mode/cycle and routes immediately to the profile selector. The next screensaver entry restarts the alternating cycle from the beginning.
+
+**Done means:** changing the mode in settings takes effect on the next screensaver entry without a reload. With "Alternating" set to 60/60 and photos configured, the splash flips between the two views every minute. Touching the screen mid-photo immediately shows the profile selector.
+
+**US-2.12.1a: Admin Splash Preview**
+From admin settings, a "Preview splash" panel exposes three buttons — **Ambient**, **Photo**, **Alternating** — that render the chosen mode on demand without waiting for the screensaver timeout. The Alternating preview runs in fast-forward (~10 s per side) so the admin can see both phases quickly. Exiting the preview returns to the settings page; it does not log the admin out.
+
+**Done means:** an admin tweaking `splash_calendar_mode` from `off` → `busy_only` can hit "Preview: Ambient" and immediately see the obscured agenda exactly as a passerby would, then return to settings to adjust further.
+
+**US-2.12.2: Ambient Agenda Content**
+The Ambient splash renders, top-to-bottom:
+1. **Greeting + clock** — date, current time, household timezone.
+2. **Today's agenda** — events for today, color-dot per assigned profile, grouped Morning / Afternoon / Evening (same buckets as the dashboard).
+3. **Upcoming days** — agenda for day +1, +2, … up to `splash_agenda_max_days` (admin cap, 1–7, default **3**), but the renderer **stops early** if the next day's block would overflow the viewport. Each day gets a header ("Tomorrow", weekday name).
+4. **Today's routines** — active routines for today grouped by time block, showing name, time block, step count, 🔥 streak, and the assignee's name and avatar (or a "Household" indicator when `profile_id` is null). Read-only on the splash; completion is only possible after login.
+5. *(optional)* Today's meals and current weather — independent toggles, see US-2.12.4.
+
+The splash always renders in a fixed **"kid-safe" palette** — high-contrast, warm, optimized for 3–6 ft viewing distance — independent of the household theme/accent settings. Theme, dark mode, and accent color apply only to post-login views.
+
+**Done means:** with 6 events today and 4 routines, the splash shows all of them. With 30 events across 7 days and `splash_agenda_max_days = 7`, the splash shows as many full days as fit on the viewport and truncates cleanly with a "+N more" footer for the cut day.
+
+**US-2.12.3: Pre-Login Privacy Policy (Calendar)**
+A new admin setting `splash_calendar_mode` controls how calendar/agenda content is disclosed on the splash:
+- **`off`** — full details (title, time, location, person color dot).
+- **`busy_only`** — titles replaced with "Busy"; **time and person color dot are preserved**; location hidden.
+- **`hidden`** — the entire agenda block (today + upcoming) is removed from the splash; the routines block (and others) still render.
+
+Policy is enforced **server-side** by `GET /api/splash` (see §5.3); the splash client never receives fields the policy hides.
+
+**Done means:** with mode `busy_only`, a 3 PM "Therapy appointment" event renders as a "Busy" pill with Mom's color and "3:00 PM" — and the raw API response contains no title or location for that event. With mode `hidden`, the agenda block is entirely absent. With mode `off`, full details show.
+
+**US-2.12.4: Per-Section Splash Visibility**
+Independent boolean toggles for non-calendar sections:
+- `splash_show_routines` (default **true**)
+- `splash_show_meals` (default **false** — opt-in; meal names can be more revealing than calendars)
+- `splash_show_weather` (default **true**)
+- `splash_show_messages` (default **false** — pinned notes can be sensitive)
+
+A section toggled off is omitted entirely; the section ordering is fixed by US-2.12.2.
+
+**Done means:** disabling `splash_show_routines` removes the routines block from the splash but leaves the Routines page untouched for logged-in users.
+
+**US-2.12.5: Logged-In Users Always See Full Content**
+Privacy mode no longer applies post-login. The previously-shipped PIN-gated reveal on Calendar / Meals / Dashboard views is removed; logged-in profiles see full details everywhere they are authorized. Module-level access control (e.g., admin-only settings) is unchanged.
+
+**Done means:** after PIN entry, no view shows "Busy" placeholders sourced from privacy policy.
+
+**US-2.12.6: "Lock Now" Action**
+A "Lock now" control is available from the header profile dropdown for any logged-in user. Tapping it:
+1. Logs out the current profile (clears JWT and active-profile state) via `POST /api/auth/lock`.
+2. Returns immediately to the splash (does not wait for the screensaver timeout).
+
+**Done means:** tapping "Lock now" while on the Calendar page returns the display to the splash within 250 ms; tapping the splash thereafter prompts for PIN.
+
+**US-2.12.7: Splash Refresh & Liveness**
+- Time/clock updates every 30 s.
+- Agenda + routines refetch every 60 s (or on visibility change after sleep/resume).
+- Weather follows the existing 30-min cadence.
+- A failed fetch leaves the previous data in place and shows a small unobtrusive "stale" indicator with the last-success timestamp; it does not blank the screen.
+
 ---
 
 ## 3. Admin & Configuration
@@ -313,16 +386,27 @@ Stored as a JSON object on the household record:
   },
   "theme": "system",
   "accent_color": "#3b82f6",
-  "privacy_mode": false,
   "weather_lat": null,
   "weather_lon": null,
   "weather_units": "imperial",
   "timezone": "America/New_York",
-  "time_format": "12h"
+  "time_format": "12h",
+
+  "splash_mode": "ambient",
+  "splash_alternating_ambient_seconds": 60,
+  "splash_alternating_photo_seconds": 60,
+  "splash_agenda_max_days": 3,
+  "splash_calendar_mode": "off",
+  "splash_show_routines": true,
+  "splash_show_meals": false,
+  "splash_show_weather": true,
+  "splash_show_messages": false
 }
 ```
 
 The household `timezone` (IANA name) is the **primary source of truth** for date-bucketing on the dashboard agenda, routine "today" matching, and meal-plan "today" lookups. `time_format` controls 12h/24h rendering throughout the UI.
+
+The `splash_*` keys govern the pre-login splash and disclosure policy (see §2.12). The legacy top-level `privacy_mode` boolean is **deprecated and removed** as of v2.2; an Alembic migration maps existing `privacy_mode = true` to `splash_calendar_mode = "busy_only"` and `privacy_mode = false` to `splash_calendar_mode = "off"`.
 
 ### 3.2 Module Toggles
 
@@ -391,6 +475,7 @@ Household
 |--------|----------|-------|
 | POST | `/api/auth/login` | Body: `{profile_id, pin}` → `{access_token, profile}` |
 | POST | `/api/auth/pin` | Set/change PIN for current profile |
+| POST | `/api/auth/lock` | Logout the current profile and return to splash (powers the "Lock now" action, US-2.12.6) |
 | GET | `/api/auth/me` | Current profile info |
 
 ### 5.2 Resources
@@ -422,6 +507,7 @@ Household
 | PATCH | `/api/lists/:id/items/:id/toggle` | Toggle checked state |
 | GET | `/api/weather` | Proxied weather data |
 | GET | `/api/notifications/upcoming` | Reminders due in next 24h |
+| GET | `/api/splash` | **Unauthenticated** composite read-only endpoint for the splash. Returns greeting/clock context, today + upcoming-day agenda (capped by `splash_agenda_max_days`), today's routines, optional meals/weather/messages — already filtered server-side by `splash_calendar_mode` and per-section toggles. Cache-Control: `public, max-age=30`. Must never leak fields hidden by policy (security boundary). |
 | GET/PUT | `/api/admin/settings` | Household settings JSON |
 | PATCH | `/api/admin/modules` | Enable/disable modules |
 
@@ -547,14 +633,24 @@ Every screen must handle these gracefully:
 - [x] Auto-logout on screensaver entry
 - [x] Message board with pinned notes
 - [x] Weather widget (Open-Meteo, geolocation autofill)
-- [x] Admin settings (theme, modules, screensaver, privacy mode, timezone, 12h/24h)
-- [x] Privacy mode across Dashboard, Calendar, and Meals with PIN-gated reveal
+- [x] Admin settings (theme, modules, screensaver, timezone, 12h/24h)
 - [x] PIN-based authentication; admin PIN required; PIN-on-create
 - [x] Single-household appliance with `/setup/discover` boot flow
 - [x] Profile switcher in header; active profile persists across refreshes
 - [x] OAuth tokens encrypted at rest (EncryptedString TypeDecorator)
 - [x] Docker Compose deployment
 - [x] Touch-friendly AM/PM time picker
+
+### Phase 1.5 — Splash & Pre-Login Privacy (in progress)
+- [ ] Pre-login splash: Ambient agenda mode (today + upcoming days with viewport-aware spill)
+- [ ] Splash modes: Ambient / Photo / Alternating with admin-configurable cadence
+- [ ] Pre-login privacy policy: `splash_calendar_mode` (off / busy_only / hidden)
+- [ ] Per-section splash toggles (routines / meals / weather / messages)
+- [ ] Server-side enforcement via unauthenticated `GET /api/splash`
+- [ ] "Lock now" header action and `POST /api/auth/lock`
+- [ ] Admin "Preview splash" panel (Ambient / Photo / Alternating fast-forward)
+- [ ] Remove post-login PIN-gated reveal on Calendar / Meals / Dashboard
+- [ ] Alembic migration: `privacy_mode` → `splash_calendar_mode`
 
 ### Phase 2 — Multi-Service Sync & Polish
 - [ ] Two-way Google Calendar sync (write-back)
@@ -593,4 +689,6 @@ Every screen must handle these gracefully:
 | **Point Ledger** | Append-only log of point credits (from routine steps) and debits (from reward redemptions). |
 | **Sync Queue** | Pending outbound changes for external calendar providers, processed when connectivity is available. |
 | **Kiosk Mode** | Browser launched in fullscreen without address bar, used for the wall display. |
-| **Privacy Mode** | Setting that hides event details on the display, showing only "Busy." |
+| **Splash** | The device's pre-login ambient view. Renders the Ambient agenda, the photo frame, or alternates between them per admin setting. Source of truth for what passersby can see. |
+| **Pre-Login Privacy Policy** | Admin-controlled disclosure rules (calendar mode + per-section toggles) applied server-side to the unauthenticated `/api/splash` endpoint. Replaces the v2.1 post-login privacy mode. |
+| **Lock Now** | Header action that logs out the current profile and returns the device to the splash on demand, without waiting for the screensaver timeout. |
