@@ -59,7 +59,19 @@ async def _make_event(
     db_session.add(cal)
     await db_session.flush()
 
-    start = datetime.now(timezone.utc) + timedelta(hours=start_offset_hours)
+    # Anchor to noon today in the household's timezone so the event always
+    # lands on "today's" bucket regardless of when the test runs. Default
+    # household tz is UTC; tests don't override it.
+    from datetime import time as _time
+    from zoneinfo import ZoneInfo as _ZI
+    tz_name = (household.settings or {}).get("timezone", "UTC")
+    try:
+        tz = _ZI(tz_name)
+    except Exception:
+        tz = timezone.utc
+    today_local = datetime.now(tz).date()
+    base = datetime.combine(today_local, _time(12, 0), tzinfo=tz)
+    start = (base + timedelta(hours=start_offset_hours - 2)).astimezone(timezone.utc)
     event = Event(
         source_calendar_id=cal.id,
         profile_id=profile.id,
