@@ -1,6 +1,11 @@
-# Family Hub Display
+# Hestia
 
-A local, wall-mounted family dashboard application that shows calendars, routines, chores, lists, and meal plans. Runs on a local network (NUC/RPi + touch display in kiosk mode) and syncs with external services.
+> Self-hosted, privacy-first family command center.
+> Formerly known as **Family Hub Display**.
+
+Hestia is a wall-mounted family dashboard that shows calendars, routines, chores, lists, meals, and a pre-login ambient splash. It runs on a local network (NUC / Raspberry Pi + touch display in kiosk mode) and syncs with external services without sending data to a vendor cloud.
+
+See [`PRD_Family_Hub_Display_v2.md`](./PRD_Family_Hub_Display_v2.md) for the full product spec.
 
 ## Tech Stack
 
@@ -95,6 +100,7 @@ family-hub/
 - **Kid-friendly routines** — Step-by-step checklists with streaks
 - **Shared lists** — Grocery, to-do, packing lists
 - **Meal planning** — Weekly meal view with assignments
+- **Pre-login splash with admin-controlled privacy** — Ambient agenda, photo frame, or alternating modes shown before login. Admin chooses what (if anything) is disclosed to passersby via per-section toggles and a calendar mode (`off` / `busy_only` / `hidden`). Live local weather and Hestia hearth backdrop included.
 - **Offline-first** — Fully functional without internet
 - **Companion PWA** — Manage from phone when away from home
 - **Home Assistant integration** — Webhooks and REST API

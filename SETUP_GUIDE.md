@@ -1,6 +1,6 @@
-# Family Hub Display — Setup Guide (macOS)
+# Hestia — Setup Guide (macOS)
 
-This is a step-by-step guide to get the Family Hub running on your Mac.
+This is a step-by-step guide to get Hestia (formerly Family Hub Display) running on your Mac.
 
 ---
 
