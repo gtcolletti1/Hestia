@@ -423,6 +423,8 @@ async def test_policy_block_echoes_settings(
     await _set_settings(
         db_session, sample_household,
         splash_mode="alternating",
+        splash_alternating_ambient_seconds=45,
+        splash_alternating_photo_seconds=90,
         splash_calendar_mode="busy_only",
         splash_agenda_max_days=5,
         splash_show_routines=False,
@@ -435,6 +437,8 @@ async def test_policy_block_echoes_settings(
     )
     p = resp.json()["policy"]
     assert p["splash_mode"] == "alternating"
+    assert p["splash_alternating_ambient_seconds"] == 45
+    assert p["splash_alternating_photo_seconds"] == 90
     assert p["splash_calendar_mode"] == "busy_only"
     assert p["splash_agenda_max_days"] == 5
     assert p["show_routines"] is False

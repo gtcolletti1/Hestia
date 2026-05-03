@@ -91,6 +91,8 @@ class SplashPolicy(BaseModel):
     re-fetching settings.
     """
     splash_mode: str
+    splash_alternating_ambient_seconds: int
+    splash_alternating_photo_seconds: int
     splash_calendar_mode: str
     splash_agenda_max_days: int
     show_routines: bool

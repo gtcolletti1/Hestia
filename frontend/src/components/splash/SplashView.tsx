@@ -12,6 +12,13 @@ interface SplashViewProps {
   /** Called when the user touches/clicks anywhere — typically swaps
    *  the splash for the profile selector. */
   onUnlock: () => void;
+  /** Admin-side preview override. When set, ignores the policy-derived
+   *  ``splash_mode`` and runs the alternating cycle at a fixed
+   *  fast-forward cadence (~10s/side per US-2.12.1a). */
+  previewMode?: SplashMode;
+  /** Suppresses the unlock-on-tap behaviour for the embedded admin
+   *  preview frame (admins shouldn't be logged out by previewing). */
+  disableUnlock?: boolean;
 }
 
 /** Modes we actually flip between when the admin chose "alternating". */
@@ -30,7 +37,7 @@ type DisplayedLayer = "ambient" | "photo";
  *                      pausing on touch (so a user can read the agenda
  *                      without it animating away mid-glance).
  */
-export default function SplashView({ onUnlock }: SplashViewProps) {
+export default function SplashView({ onUnlock, previewMode, disableUnlock }: SplashViewProps) {
   const householdId = useHouseholdStore((s) => s.householdId);
   const theme = useThemeStore((s) => s.theme);
 
@@ -45,8 +52,13 @@ export default function SplashView({ onUnlock }: SplashViewProps) {
     retry: 2,
   });
 
-  const mode: SplashMode = data?.policy.splash_mode ?? "ambient";
-  const altSeconds = data?.policy.splash_alternating_seconds ?? 30;
+  const mode: SplashMode = previewMode ?? data?.policy.splash_mode ?? "ambient";
+  const ambientSeconds = previewMode
+    ? 10
+    : data?.policy.splash_alternating_ambient_seconds ?? 60;
+  const photoSeconds = previewMode
+    ? 10
+    : data?.policy.splash_alternating_photo_seconds ?? 60;
 
   const [displayed, setDisplayed] = useState<DisplayedLayer>(
     mode === "photo" ? "photo" : "ambient",
@@ -60,15 +72,16 @@ export default function SplashView({ onUnlock }: SplashViewProps) {
 
   // Alternation loop. Per US-2.12.1a, a touch interrupts the cycle and
   // pauses for ~10s so the user has time to read the screen before it
-  // flips to the other layer.
+  // flips to the other layer. Each layer has its own dwell duration.
   useEffect(() => {
     if (mode !== "alternating") return;
-    const id = window.setInterval(() => {
+    const dwell = (displayed === "ambient" ? ambientSeconds : photoSeconds) * 1000;
+    const id = window.setTimeout(() => {
       if (Date.now() < pausedUntil) return;
       setDisplayed((d) => (d === "ambient" ? "photo" : "ambient"));
-    }, Math.max(5, altSeconds) * 1000);
-    return () => window.clearInterval(id);
-  }, [mode, altSeconds, pausedUntil]);
+    }, Math.max(2000, dwell));
+    return () => window.clearTimeout(id);
+  }, [mode, displayed, ambientSeconds, photoSeconds, pausedUntil]);
 
   // CSS variables drive the kid-safe palette through Tailwind
   // arbitrary-value class references inside SplashContent (e.g.
@@ -94,7 +107,7 @@ export default function SplashView({ onUnlock }: SplashViewProps) {
   // a blank screen because the server is sluggish.
   if (error || (!isLoading && !data)) {
     return (
-      <FullbleedTapTarget onUnlock={onUnlock} style={styleVars}>
+      <FullbleedTapTarget onUnlock={onUnlock} disableUnlock={disableUnlock} style={styleVars}>
         <div className="flex h-full w-full items-center justify-center text-[color:var(--splash-text)]">
           <div className="text-center">
             <div className="text-2xl font-semibold">Hestia</div>
@@ -109,7 +122,7 @@ export default function SplashView({ onUnlock }: SplashViewProps) {
 
   if (!data) {
     return (
-      <FullbleedTapTarget onUnlock={onUnlock} style={styleVars}>
+      <FullbleedTapTarget onUnlock={onUnlock} disableUnlock={disableUnlock} style={styleVars}>
         <div className="flex h-full w-full items-center justify-center text-[color:var(--splash-text-muted)]">
           Loading…
         </div>
@@ -120,6 +133,7 @@ export default function SplashView({ onUnlock }: SplashViewProps) {
   return (
     <FullbleedTapTarget
       onUnlock={onUnlock}
+      disableUnlock={disableUnlock}
       style={styleVars}
       onInteract={() => {
         // Pause alternation for 10s on touch (US-2.12.1a).
@@ -128,7 +142,7 @@ export default function SplashView({ onUnlock }: SplashViewProps) {
     >
       {displayed === "photo" ? (
         <SplashPhotoLayer
-          transitionSeconds={altSeconds}
+          transitionSeconds={photoSeconds}
           timeFormat={data.clock.time_format}
         />
       ) : (
@@ -141,30 +155,26 @@ export default function SplashView({ onUnlock }: SplashViewProps) {
 interface TapTargetProps {
   onUnlock: () => void;
   onInteract?: () => void;
+  disableUnlock?: boolean;
   style?: React.CSSProperties;
   children: React.ReactNode;
 }
 
-function FullbleedTapTarget({ onUnlock, onInteract, style, children }: TapTargetProps) {
-  // The whole splash is one big button. Pressing anywhere takes the
-  // user to the profile selector. We use ``onPointerDown`` so the
-  // transition feels instant (fires before click on touch devices).
+function FullbleedTapTarget({ onUnlock, onInteract, disableUnlock, style, children }: TapTargetProps) {
   const handlePress = (e: React.PointerEvent) => {
     onInteract?.();
-    // Right-click and synthesized pointer events from screensaver
-    // dismissal should not log anyone in — only primary, isPrimary
-    // user gestures unlock.
+    if (disableUnlock) return;
     if (e.button !== 0 || !e.isPrimary) return;
     onUnlock();
   };
 
   return (
     <div
-      className="fixed inset-0 z-40 cursor-pointer select-none overflow-hidden"
+      className={`${disableUnlock ? "absolute" : "fixed"} inset-0 z-40 cursor-pointer select-none overflow-hidden`}
       style={style}
       onPointerDown={handlePress}
       role="button"
-      aria-label="Tap to sign in"
+      aria-label={disableUnlock ? "Splash preview" : "Tap to sign in"}
       tabIndex={0}
     >
       {children}

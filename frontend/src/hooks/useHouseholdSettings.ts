@@ -25,7 +25,8 @@ export interface HouseholdSettings {
   // Pre-login splash + privacy policy. Replaces the deprecated
   // post-login `privacy_mode` boolean (PRD §2.12 / Hestia v2.2).
   splash_mode: SplashMode;
-  splash_alternating_seconds: number;
+  splash_alternating_ambient_seconds: number;
+  splash_alternating_photo_seconds: number;
   splash_calendar_mode: SplashCalendarMode;
   splash_agenda_max_days: number;
   splash_show_routines: boolean;

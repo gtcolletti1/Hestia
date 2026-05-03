@@ -81,7 +81,8 @@ export interface SplashWeather {
 
 export interface SplashPolicy {
   splash_mode: SplashMode;
-  splash_alternating_seconds: number;
+  splash_alternating_ambient_seconds: number;
+  splash_alternating_photo_seconds: number;
   splash_calendar_mode: SplashCalendarMode;
   splash_agenda_max_days: number;
   show_routines: boolean;

@@ -385,6 +385,8 @@ async def get_splash(
         ),
         policy=SplashPolicy(
             splash_mode=settings.splash_mode,
+            splash_alternating_ambient_seconds=settings.splash_alternating_ambient_seconds,
+            splash_alternating_photo_seconds=settings.splash_alternating_photo_seconds,
             splash_calendar_mode=settings.splash_calendar_mode,
             splash_agenda_max_days=settings.splash_agenda_max_days,
             show_routines=settings.splash_show_routines,

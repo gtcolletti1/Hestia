@@ -5,6 +5,8 @@ import { admin, integrations as integrationsApi, photos as photosApi } from "@/a
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useThemeStore } from "@/stores/themeStore";
+import SplashSettingsSection from "./SplashSettingsSection";
+import type { SplashCalendarMode, SplashMode } from "@/types/splash";
 
 type Theme = "light" | "dark";
 
@@ -26,6 +28,16 @@ interface HouseholdSettings {
   weather_units: string;
   screensaver_timeout_minutes: number;
   screensaver_transition_seconds: number;
+  // Pre-login splash + privacy policy (PRD §2.12 / Hestia v2.2).
+  splash_mode: SplashMode;
+  splash_alternating_ambient_seconds: number;
+  splash_alternating_photo_seconds: number;
+  splash_calendar_mode: SplashCalendarMode;
+  splash_agenda_max_days: number;
+  splash_show_routines: boolean;
+  splash_show_meals: boolean;
+  splash_show_weather: boolean;
+  splash_show_messages: boolean;
 }
 
 interface IcalCalendarSummary {
@@ -61,6 +73,15 @@ const DEFAULT_SETTINGS: HouseholdSettings = {
   weather_units: "imperial",
   screensaver_timeout_minutes: 2,
   screensaver_transition_seconds: 10,
+  splash_mode: "ambient",
+  splash_alternating_ambient_seconds: 60,
+  splash_alternating_photo_seconds: 60,
+  splash_calendar_mode: "off",
+  splash_agenda_max_days: 3,
+  splash_show_routines: true,
+  splash_show_meals: false,
+  splash_show_weather: true,
+  splash_show_messages: false,
 };
 
 const ACCENT_COLORS = [
@@ -427,10 +448,26 @@ export default function SettingsPanel() {
         </div>
       </section>
 
-      {/* Privacy moved to Splash settings (PRD §2.12).
-          The pre-login splash + per-section visibility toggles will
-          land in the Settings UI in Phase 4. For now, admins can
-          adjust splash policy via the API. */}
+      {/* Pre-login splash + privacy policy (PRD §2.12). */}
+      <SplashSettingsSection
+        values={{
+          splash_mode: form.splash_mode,
+          splash_alternating_ambient_seconds: form.splash_alternating_ambient_seconds,
+          splash_alternating_photo_seconds: form.splash_alternating_photo_seconds,
+          splash_calendar_mode: form.splash_calendar_mode,
+          splash_agenda_max_days: form.splash_agenda_max_days,
+          splash_show_routines: form.splash_show_routines,
+          splash_show_meals: form.splash_show_meals,
+          splash_show_weather: form.splash_show_weather,
+          splash_show_messages: form.splash_show_messages,
+        }}
+        onChange={(patch) => {
+          const next = { ...form, ...patch };
+          setForm(next);
+          if (isAdmin) saveMutation.mutate(next);
+        }}
+        disabled={!isAdmin}
+      />
 
       {/* Time Format */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
