@@ -82,7 +82,18 @@ install_prereqs() {
 # ---------- Step 2: Docker ---------------------------------------------------
 
 install_docker() {
-  if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+  # Detect snap-installed Docker — it works for hello-world but breaks Compose
+  # volumes/networking in confinement. Force-replace with the apt version.
+  if command -v snap >/dev/null && snap list docker >/dev/null 2>&1; then
+    warn "Detected snap-installed Docker — this is incompatible with Hestia's"
+    warn "Compose stack (volume mounts and networking misbehave under snap"
+    warn "confinement). Removing it and installing the official apt version..."
+    $SUDO snap remove docker || die "Failed to remove snap docker. Run 'sudo snap remove docker' manually and re-run this script."
+  fi
+
+  if command -v docker >/dev/null \
+     && docker compose version >/dev/null 2>&1 \
+     && getent group docker >/dev/null; then
     ok "Docker + Compose plugin already installed ($(docker --version | awk '{print $3}' | tr -d ','))"
     return
   fi
