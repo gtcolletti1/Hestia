@@ -77,3 +77,4 @@ class DashboardResponse(BaseModel):
     active_lists: list[ActiveListSummary]
     vacation: VacationStatus | None = None
     school_day: SchoolDayStatus | None = None
+    routines_all_done: bool = False

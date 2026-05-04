@@ -207,7 +207,7 @@ async def _build_routines(
     today: date,
     current_weekday: int,
     active_block,
-) -> list[SplashRoutine]:
+) -> tuple[list[SplashRoutine], bool]:
     routines_result = await db.execute(
         select(Routine)
         .options(selectinload(Routine.steps), selectinload(Routine.profile))
@@ -235,6 +235,10 @@ async def _build_routines(
         db, todays_routines, today, is_school_day=today_is_school
     )
     routines = [r for r in todays_routines if r.id not in completed_ids]
+    # True iff there were routines scheduled for this block today and
+    # every one of them is now complete — drives the celebratory "all
+    # done" card on the splash.
+    all_done = bool(todays_routines) and not routines
 
     # One streak walk per active routine. The set of "today" routines
     # is small (usually < 10) so the N+1 is acceptable; if it grows we
@@ -277,7 +281,7 @@ async def _build_routines(
             )
         )
 
-    return out
+    return out, all_done
 
 
 async def _build_meals(
@@ -362,9 +366,10 @@ async def get_splash(
         )
 
     routines: list[SplashRoutine] | None = None
+    routines_all_done = False
     if settings.splash_show_routines:
         active_block = current_time_block(now_local.time())
-        routines = await _build_routines(
+        routines, routines_all_done = await _build_routines(
             db, household.id, today, current_weekday, active_block
         )
 
@@ -486,4 +491,5 @@ async def get_splash(
         messages=messages,
         vacation=vacation,
         school_day=school_day,
+        routines_all_done=routines_all_done,
     )

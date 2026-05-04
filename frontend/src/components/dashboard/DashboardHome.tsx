@@ -117,9 +117,11 @@ function AgendaSection({ buckets, timeFormat }: { buckets: AgendaBucket[]; timeF
 
 function RoutinesWidget({
   routines,
+  allDone,
   onOpen,
 }: {
   routines: DashboardRoutine[];
+  allDone: boolean;
   onOpen: (routineId: string) => void;
 }) {
   return (
@@ -128,9 +130,21 @@ function RoutinesWidget({
         Active Routines
       </h3>
       {routines.length === 0 ? (
-        <p className="text-sm text-gray-400 italic">
-          Nothing left for this time block — nice work!
-        </p>
+        allDone ? (
+          <div className="flex flex-col items-center text-center py-3">
+            <div className="text-3xl" aria-hidden>🎉</div>
+            <p className="mt-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+              All done for now!
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Nothing left for this time block.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 italic">
+            Nothing scheduled for this time block.
+          </p>
+        )
       ) : (
         <ul className="space-y-2">
           {routines.map((r) => (
@@ -396,6 +410,7 @@ export default function DashboardHome() {
                   {modulesEnabled.routines && (
                     <RoutinesWidget
                       routines={data?.active_routines ?? []}
+                      allDone={!!data?.routines_all_done}
                       onOpen={handleOpenRoutine}
                     />
                   )}

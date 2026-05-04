@@ -117,4 +117,5 @@ export interface SplashResponse {
   policy: SplashPolicy;
   vacation?: SplashVacation | null;
   school_day?: SplashSchoolDay | null;
+  routines_all_done?: boolean;
 }

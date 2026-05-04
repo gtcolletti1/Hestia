@@ -144,3 +144,7 @@ class SplashResponse(BaseModel):
     messages: list[SplashMessage] | None = None
     vacation: SplashVacation | None = None
     school_day: SplashSchoolDay | None = None
+    # True iff there were routines scheduled for the current time block
+    # today and every one of them has been completed — drives the
+    # celebratory "all done" card when ``routines`` is an empty list.
+    routines_all_done: bool = False

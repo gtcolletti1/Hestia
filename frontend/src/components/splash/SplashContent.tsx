@@ -39,6 +39,8 @@ export default function SplashContent({ data, timeFormat }: SplashContentProps) 
   const hasMessages = messages !== null && messages.length > 0;
   const onVacation = !!vacation?.active;
   const schoolBanner = school_day?.reason ? school_day : null;
+  const showAllDoneCard =
+    !!data.routines_all_done && (routines?.length ?? 0) === 0;
 
   return (
     <div className="relative flex h-full w-full flex-col gap-4 px-6 sm:px-8 pt-[38vh] pb-6 text-[color:var(--splash-text)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
@@ -91,6 +93,18 @@ export default function SplashContent({ data, timeFormat }: SplashContentProps) 
             <SplashCard className="min-h-0 flex flex-col">
               <SectionHeading icon="✨" label="Today's Routines" />
               <RoutinesBlock routines={routines!} />
+            </SplashCard>
+          )}
+
+          {showAllDoneCard && (
+            <SplashCard className="flex flex-col items-center justify-center text-center py-6">
+              <div className="text-5xl" aria-hidden>🎉</div>
+              <p className="mt-2 text-lg font-semibold">
+                All routines done!
+              </p>
+              <p className="text-sm opacity-80">
+                Nothing left for this time block — nice work.
+              </p>
             </SplashCard>
           )}
 

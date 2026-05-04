@@ -216,6 +216,11 @@ async def get_dashboard(
             }
         )
 
+    # True iff today *did* have at least one scheduled routine for this
+    # block and every one of them is now complete — drives the
+    # celebratory "all done" card on the home view.
+    routines_all_done = bool(todays_routines) and not active_routines
+
     # ── Today's meals ────────────────────────────────────────────────────
     meals_result = await db.execute(
         select(MealPlan)
@@ -258,6 +263,7 @@ async def get_dashboard(
         profiles=profiles,
         agenda=agenda,
         active_routines=active_routines,
+        routines_all_done=routines_all_done,
         today_meals=today_meals,
         active_lists=active_lists,
         vacation=(

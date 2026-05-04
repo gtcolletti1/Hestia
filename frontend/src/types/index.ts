@@ -146,6 +146,7 @@ export interface DashboardData {
   }[];
   vacation?: VacationStatus | null;
   school_day?: SchoolDayStatus | null;
+  routines_all_done?: boolean;
 }
 
 export interface AgendaBucket {
