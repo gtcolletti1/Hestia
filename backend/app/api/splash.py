@@ -20,12 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.models.calendar import Event, SourceCalendar
 from app.models.meal import MealPlan
 from app.models.note import Note
 from app.models.routine import Routine, RoutineCompletion
 from app.models.user import Household, Profile
 from app.schemas.admin import HouseholdSettings
+from app.services.event_expansion import expand_events_in_range
 from app.services.routine_window import (
     applicable_step_ids,
     routine_runs_today,
@@ -136,18 +136,12 @@ async def _build_days(
     range_start = range_start_local.astimezone(timezone.utc)
     range_end = range_end_local.astimezone(timezone.utc)
 
-    stmt = (
-        select(Event, Profile.name.label("profile_name"), Profile.color.label("profile_color"))
-        .join(SourceCalendar, Event.source_calendar_id == SourceCalendar.id)
-        .outerjoin(Profile, Event.profile_id == Profile.id)
-        .where(
-            SourceCalendar.household_id == household_id,
-            Event.start_time < range_end,
-            Event.end_time > range_start,
-        )
-        .order_by(Event.start_time)
+    expanded = await expand_events_in_range(
+        db,
+        household_id,
+        range_start,
+        range_end,
     )
-    rows = (await db.execute(stmt)).all()
 
     days: list[SplashDay] = []
     for offset in range(max_days):
@@ -158,13 +152,10 @@ async def _build_days(
         d_end = d_end_local.astimezone(timezone.utc)
 
         events: list[SplashEvent] = []
-        for event, p_name, p_color in rows:
-            start = event.start_time
-            if start.tzinfo is None:
-                start = start.replace(tzinfo=timezone.utc)
-            end = event.end_time
-            if end.tzinfo is None:
-                end = end.replace(tzinfo=timezone.utc)
+        for occ in expanded:
+            event = occ.event
+            start = occ.start_time
+            end = occ.end_time
             if not (start < d_end and end > d_start):
                 continue
 
@@ -179,7 +170,7 @@ async def _build_days(
                         start_time=start,
                         end_time=end,
                         color=None,  # source-calendar color can identify the calendar
-                        profile_color=p_color,
+                        profile_color=occ.profile_color,
                         profile_name=None,
                         location=None,
                         all_day=bool(getattr(event, "all_day", False)),
@@ -193,8 +184,8 @@ async def _build_days(
                         start_time=start,
                         end_time=end,
                         color=event.color,
-                        profile_color=p_color,
-                        profile_name=p_name,
+                        profile_color=occ.profile_color,
+                        profile_name=occ.profile_name,
                         location=event.location,
                         all_day=bool(getattr(event, "all_day", False)),
                     )

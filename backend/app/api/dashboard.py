@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.auth import get_current_profile
 from app.database import get_db
-from app.models.calendar import Event, SourceCalendar
 from app.models.list import ListItem, TaskList
 from app.models.meal import MealPlan
 from app.models.routine import Routine, RoutineCompletion
@@ -25,6 +24,7 @@ from app.schemas.dashboard import (
     ProfileSummary,
     VacationStatus,
 )
+from app.services.event_expansion import expand_events_in_range
 from app.services.routine_window import (
     applicable_step_ids,
     routine_runs_today,
@@ -105,19 +105,12 @@ async def get_dashboard(
     day_start = day_start_local.astimezone(timezone.utc)
     day_end = day_end_local.astimezone(timezone.utc)
 
-    events_stmt = (
-        select(Event, Profile.name.label("profile_name"))
-        .join(SourceCalendar, Event.source_calendar_id == SourceCalendar.id)
-        .outerjoin(Profile, Event.profile_id == Profile.id)
-        .where(
-            SourceCalendar.household_id == household_id,
-            Event.start_time < day_end,
-            Event.end_time > day_start,
-        )
-        .order_by(Event.start_time)
+    events_stmt_expanded = await expand_events_in_range(
+        db,
+        household_id,
+        day_start,
+        day_end,
     )
-    events_result = await db.execute(events_stmt)
-    rows = events_result.all()
 
     morning_events: list[EventSummary] = []
     afternoon_events: list[EventSummary] = []
@@ -126,22 +119,20 @@ async def get_dashboard(
     noon = time(12, 0)
     five_pm = time(17, 0)
 
-    for event, profile_name in rows:
+    for occ in events_stmt_expanded:
+        event = occ.event
         summary = EventSummary(
             id=event.id,
             title=event.title,
-            start_time=event.start_time,
-            end_time=event.end_time,
+            start_time=occ.start_time,
+            end_time=occ.end_time,
             color=event.color,
-            profile_name=profile_name,
+            profile_name=occ.profile_name,
             location=event.location,
         )
         # Bucket using the event's local time in the household's zone, not
         # UTC — otherwise a 7pm-EDT event (23:00 UTC) lands in "morning".
-        start_aware = event.start_time
-        if start_aware.tzinfo is None:
-            start_aware = start_aware.replace(tzinfo=timezone.utc)
-        event_local_time = start_aware.astimezone(local_tz).time()
+        event_local_time = occ.start_time.astimezone(local_tz).time()
         if event_local_time < noon:
             morning_events.append(summary)
         elif event_local_time < five_pm:
