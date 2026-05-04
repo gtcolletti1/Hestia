@@ -748,6 +748,9 @@ export default function SettingsPanel() {
       {/* Vacation Mode (Phase C parental override) */}
       <VacationModeSection householdId={householdId} />
 
+      {/* School-day calendar (snow days, in-service days, etc.) */}
+      <SchoolClosuresSection householdId={householdId} />
+
       {/* Calendar & Outlook Integrations */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -1202,6 +1205,8 @@ function ScreensaverPhotosSection({ householdId }: { householdId: string | null 
 import {
   routineOverrides as overridesApiVM,
   type RoutineOverride as RoutineOverrideVM,
+  schoolClosures as closuresApi,
+  type SchoolClosure as SchoolClosureT,
 } from "@/api/endpoints";
 
 function VacationModeSection({ householdId }: { householdId: string | null }) {
@@ -1322,6 +1327,135 @@ function VacationModeSection({ householdId }: { householdId: string | null }) {
           className="touch-target rounded-xl bg-amber-600 px-5 py-2 font-semibold text-white shadow transition hover:opacity-90 active:scale-95 disabled:opacity-50"
         >
           Start Vacation Mode
+        </button>
+      </div>
+    </section>
+  );
+}
+
+
+// ── School Closures (snow days, district holidays, in-service days) ──────────
+
+function SchoolClosuresSection({ householdId }: { householdId: string | null }) {
+  const queryClient = useQueryClient();
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const { data: closures = [] } = useQuery<SchoolClosureT[]>({
+    queryKey: ["school-closures", householdId],
+    queryFn: async () =>
+      (await closuresApi.list(householdId!, { start_date: todayIso })).data,
+    enabled: !!householdId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      closuresApi.create({
+        household_id: householdId!,
+        date,
+        reason: reason || null,
+      }),
+    onSuccess: () => {
+      setDate("");
+      setReason("");
+      setError(null);
+      queryClient.invalidateQueries({ queryKey: ["school-closures"] });
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["splash"] });
+    },
+    onError: (err: unknown) => {
+      const detail =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ?? "Could not add closure";
+      setError(typeof detail === "string" ? detail : "Could not add closure");
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (id: string) => closuresApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["school-closures"] });
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["splash"] });
+    },
+  });
+
+  return (
+    <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+        🎒 School Closures
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Mark snow days, in-service days, and district holidays. Routine
+        steps tagged <em>"Only on school days"</em> (e.g. "pack backpack")
+        are hidden on these dates and on weekends + US federal holidays.
+      </p>
+
+      {closures.length > 0 && (
+        <ul className="mb-4 divide-y divide-gray-200 dark:divide-gray-700 rounded-lg border border-gray-200 dark:border-gray-700">
+          {closures.map((c) => (
+            <li
+              key={c.id}
+              className="flex items-center justify-between px-3 py-2 text-sm"
+            >
+              <div className="text-gray-800 dark:text-gray-200">
+                <strong>{c.date}</strong>
+                {c.reason && (
+                  <span className="ml-2 italic text-gray-500 dark:text-gray-400">
+                    — {c.reason}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => removeMutation.mutate(c.id)}
+                className="text-xs font-semibold text-red-600 hover:underline dark:text-red-400"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && (
+        <div className="mb-3 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-2 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <label className="text-sm text-gray-700 dark:text-gray-300">
+          Date
+          <input
+            type="date"
+            value={date}
+            min={todayIso}
+            onChange={(e) => setDate(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2"
+          />
+        </label>
+        <label className="sm:col-span-2 text-sm text-gray-700 dark:text-gray-300">
+          Reason (optional)
+          <input
+            type="text"
+            value={reason}
+            placeholder="Snow day"
+            onChange={(e) => setReason(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2"
+          />
+        </label>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button
+          disabled={!householdId || !date || createMutation.isPending}
+          onClick={() => createMutation.mutate()}
+          className="touch-target rounded-xl bg-blue-600 px-5 py-2 font-semibold text-white shadow transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+        >
+          Add Closure
         </button>
       </div>
     </section>

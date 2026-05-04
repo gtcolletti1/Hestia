@@ -43,6 +43,7 @@ export interface RoutineStep {
   sort_order: number;
   points_value: number;
   days_of_week?: number[] | null;
+  school_day_only?: boolean;
 }
 
 export interface RoutineCompletion {

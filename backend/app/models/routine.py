@@ -97,6 +97,16 @@ class RoutineStep(Base):
             "on every day the parent routine runs."
         ),
     )
+    school_day_only: Mapped[bool] = mapped_column(
+        default=False,
+        nullable=False,
+        server_default="false",
+        comment=(
+            "If True, this step only applies on school days. Non-school days "
+            "(weekends, US federal holidays, and admin-marked closures) hide "
+            "the step from the routine for that day."
+        ),
+    )
     sort_order: Mapped[int] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         default=func.now(), server_default=func.now()

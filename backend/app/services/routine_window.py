@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, time, timedelta
-from typing import Iterable
+from typing import Iterable, TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,9 @@ from app.models.routine import (
     RoutineStep,
     TimeBlock,
 )
+
+if TYPE_CHECKING:
+    from app.services.school_day import SchoolDayContext  # noqa: F401
 
 
 async def load_active_overrides(
@@ -100,25 +103,43 @@ def current_time_block(local_time: time) -> TimeBlock:
     return TimeBlock.bedtime
 
 
-def step_applies_on(step: RoutineStep, weekday: int) -> bool:
+def step_applies_on(
+    step: RoutineStep, weekday: int, *, is_school_day: bool = True
+) -> bool:
     """Whether ``step`` runs on ``weekday`` (0=Mon..6=Sun).
 
     A step with NULL/empty ``days_of_week`` runs on every day the routine
     runs — that's the default and matches pre-Phase-B behavior.
+
+    If ``school_day_only`` is True on the step, the caller must pass
+    ``is_school_day=False`` for non-school days (weekends, US federal
+    holidays, admin-marked closures) to suppress the step.
     """
+    if getattr(step, "school_day_only", False) and not is_school_day:
+        return False
     dow = step.days_of_week
     if not dow:
         return True
     return weekday in dow
 
 
-def applicable_step_ids(routine: Routine, weekday: int) -> set[str]:
+def applicable_step_ids(
+    routine: Routine, weekday: int, *, is_school_day: bool = True
+) -> set[str]:
     """IDs (as str) of steps in ``routine`` that apply on ``weekday``."""
-    return {str(s.id) for s in routine.steps if step_applies_on(s, weekday)}
+    return {
+        str(s.id)
+        for s in routine.steps
+        if step_applies_on(s, weekday, is_school_day=is_school_day)
+    }
 
 
 def is_routine_complete_for(
-    routine: Routine, weekday: int, completed_step_ids: Iterable[str]
+    routine: Routine,
+    weekday: int,
+    completed_step_ids: Iterable[str],
+    *,
+    is_school_day: bool = True,
 ) -> bool:
     """True iff every step applicable on ``weekday`` is in ``completed_step_ids``.
 
@@ -126,7 +147,7 @@ def is_routine_complete_for(
     weekday-only and it's Sunday), this returns False — the routine should
     not have been listed for that day in the first place.
     """
-    needed = applicable_step_ids(routine, weekday)
+    needed = applicable_step_ids(routine, weekday, is_school_day=is_school_day)
     if not needed:
         return False
     return needed.issubset(set(completed_step_ids))
@@ -138,6 +159,7 @@ def routine_runs_today(
     *,
     overrides: Iterable[RoutineOverride] | None = None,
     target: date | None = None,
+    is_school_day: bool = True,
 ) -> bool:
     """Should this routine be listed for ``weekday``?
 
@@ -152,13 +174,15 @@ def routine_runs_today(
             return False
     if not routine.steps:
         return True
-    return bool(applicable_step_ids(routine, weekday))
+    return bool(applicable_step_ids(routine, weekday, is_school_day=is_school_day))
 
 
 async def completed_routine_ids_today(
     db: AsyncSession,
     routines: Iterable[Routine],
     today: date,
+    *,
+    is_school_day: bool = True,
 ) -> set[uuid.UUID]:
     """Return the set of routine ids that are fully completed today.
 
@@ -196,7 +220,7 @@ async def completed_routine_ids_today(
 
     completed: set[uuid.UUID] = set()
     for r in routines:
-        needed = applicable_step_ids(r, weekday)
+        needed = applicable_step_ids(r, weekday, is_school_day=is_school_day)
         if not r.steps:
             # Legacy step-less routine: rely on is_fully_completed flag.
             if r.profile_id is None:
@@ -234,6 +258,7 @@ async def compute_current_streak(
     max_lookback_days: int = 366,
     *,
     overrides: Iterable[RoutineOverride] | None = None,
+    school_day_ctx: "SchoolDayContext | None" = None,
 ) -> int:
     """Walk backwards across the routine's *scheduled* days, counting
     consecutive days where every applicable step was completed.
@@ -242,6 +267,13 @@ async def compute_current_streak(
     non-scheduled days: they are skipped in the walk-back, neither
     extending nor breaking the streak. So a holiday week off doesn't
     nuke a 30-day streak.
+
+    If ``school_day_ctx`` is provided, ``school_day_only`` steps are
+    excluded from the applicable-step set on non-school days. A day with
+    no applicable steps at all (e.g. a weekday-morning routine where
+    every remaining step is school-day-only and today is a holiday) is
+    treated like an override-suppressed day: it neither breaks nor
+    extends the streak.
     """
     scheduled = list(routine.days_of_week or [])
     if not scheduled:
@@ -262,22 +294,46 @@ async def compute_current_streak(
         d: set(steps or []) for d, steps in result.all()
     }
 
+    def _school_day(d: date) -> bool:
+        return True if school_day_ctx is None else school_day_ctx.is_school_day(d)
+
+    def _has_applicable(d: date) -> bool:
+        return bool(
+            applicable_step_ids(
+                routine, d.weekday(), is_school_day=_school_day(d)
+            )
+        )
+
     def is_complete(d: date) -> bool:
-        return is_routine_complete_for(routine, d.weekday(), by_date.get(d, set()))
+        return is_routine_complete_for(
+            routine,
+            d.weekday(),
+            by_date.get(d, set()),
+            is_school_day=_school_day(d),
+        )
 
     def is_paused(d: date) -> bool:
         return routine_paused_on(routine, overrides_list, d) is not None
 
+    def _counts(d: date) -> bool:
+        """A day "counts" toward the streak only if it's scheduled, not
+        paused, and has at least one applicable step today."""
+        if d.weekday() not in scheduled:
+            return False
+        if is_paused(d):
+            return False
+        return _has_applicable(d)
+
     streak = 0
     cursor = today
-    today_scheduled = today.weekday() in scheduled and not is_paused(today)
-    today_done = today_scheduled and is_complete(today)
+    today_counts = _counts(today)
+    today_done = today_counts and is_complete(today)
 
-    if today_scheduled and not today_done:
+    if today_counts and not today_done:
         cursor = today - timedelta(days=1)
 
     while cursor >= earliest:
-        if cursor.weekday() in scheduled and not is_paused(cursor):
+        if _counts(cursor):
             if is_complete(cursor):
                 streak += 1
                 cursor = cursor - timedelta(days=1)

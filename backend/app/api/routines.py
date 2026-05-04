@@ -27,6 +27,7 @@ from app.services.routine_window import (
     is_routine_complete_for,
     load_active_overrides,
 )
+from app.services.school_day import load_school_day_context
 from app.data.routine_templates import ROUTINE_TEMPLATES
 
 router = APIRouter(tags=["routines"])
@@ -151,6 +152,8 @@ async def list_today_completions(
 
     today = date.today()
     weekday = today.weekday()
+    school_ctx = await load_school_day_context(db, household_id, today.year)
+    today_is_school = school_ctx.is_school_day(today)
 
     routines_stmt = (
         select(Routine)
@@ -177,7 +180,7 @@ async def list_today_completions(
         r = by_routine.get(c.routine_id)
         if r is None:
             continue
-        applicable = applicable_step_ids(r, weekday)
+        applicable = applicable_step_ids(r, weekday, is_school_day=today_is_school)
         completed = list(c.completed_steps or [])
         # Recompute fully-completed from applicable set so the flag reflects
         # *today's* schedule rather than whatever was stored at write time.
@@ -470,10 +473,16 @@ async def complete_step(
             db.add(ledger_entry)
 
     # Check if all *applicable-today* steps are done. The applicable set
-    # honors per-step days_of_week, so on a Sunday a routine whose
-    # weekday-only "Pack backpack" step isn't checked still counts as done.
+    # honors per-step days_of_week and the household's school-day calendar,
+    # so on a Sunday or a federal holiday the "Pack backpack" school-day-only
+    # step isn't required and the routine still counts as done without it.
+    school_ctx = await load_school_day_context(db, routine.household_id, today.year)
+    today_is_school = school_ctx.is_school_day(today)
     if is_routine_complete_for(
-        routine, today.weekday(), completion.completed_steps
+        routine,
+        today.weekday(),
+        completion.completed_steps,
+        is_school_day=today_is_school,
     ):
         completion.is_fully_completed = True
         completion.completed_at = datetime.utcnow()
@@ -577,8 +586,14 @@ async def uncomplete_step(
 
         # Removing a step necessarily means the routine is no longer fully
         # completed for today.
+        school_ctx = await load_school_day_context(
+            db, routine.household_id, today.year
+        )
         completion.is_fully_completed = is_routine_complete_for(
-            routine, date.today().weekday(), completion.completed_steps
+            routine,
+            today.weekday(),
+            completion.completed_steps,
+            is_school_day=school_ctx.is_school_day(today),
         )
         if not completion.is_fully_completed:
             completion.completed_at = None
@@ -612,8 +627,16 @@ async def get_streak(
 
     today = date.today()
     overrides = await load_active_overrides(db, routine.household_id, today)
+    school_ctx = await load_school_day_context(
+        db, routine.household_id, today.year
+    )
     current_streak = await compute_current_streak(
-        db, routine, profile_id, today, overrides=overrides
+        db,
+        routine,
+        profile_id,
+        today,
+        overrides=overrides,
+        school_day_ctx=school_ctx,
     )
 
     # Total completions = days where the applicable-step set was satisfied.
@@ -627,7 +650,12 @@ async def get_streak(
     ).all()
     completed_dates: list[date] = []
     for d, steps in rows:
-        if is_routine_complete_for(routine, d.weekday(), steps or []):
+        if is_routine_complete_for(
+            routine,
+            d.weekday(),
+            steps or [],
+            is_school_day=school_ctx.is_school_day(d),
+        ):
             completed_dates.append(d)
     completed_dates.sort()
     total_completions = len(completed_dates)

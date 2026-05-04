@@ -217,6 +217,28 @@ export const routineOverrides = {
   remove: (id: string) => client.delete<void>(`/routine-overrides/${id}`),
 };
 
+export interface SchoolClosure {
+  id: string;
+  household_id: string;
+  date: string;
+  reason: string | null;
+  created_by_profile_id: string | null;
+  created_at: string;
+}
+
+export const schoolClosures = {
+  list: (householdId: string, params?: { start_date?: string; end_date?: string }) =>
+    client.get<SchoolClosure[]>("/school-closures", {
+      params: { household_id: householdId, ...params },
+    }),
+  create: (payload: {
+    household_id: string;
+    date: string;
+    reason?: string | null;
+  }) => client.post<SchoolClosure>("/school-closures", payload),
+  remove: (id: string) => client.delete<void>(`/school-closures/${id}`),
+};
+
 // --- Lists ---
 
 export const lists = {

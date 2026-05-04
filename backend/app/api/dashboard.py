@@ -34,6 +34,7 @@ from app.services.routine_window import (
     load_active_overrides,
     current_time_block,
 )
+from app.services.school_day import load_school_day_context
 
 router = APIRouter(tags=["dashboard"])
 
@@ -161,11 +162,21 @@ async def get_dashboard(
         )
     )
     overrides = await load_active_overrides(db, household_id, today)
+    school_ctx = await load_school_day_context(db, household_id, today.year)
+    today_is_school = school_ctx.is_school_day(today)
     todays_routines = [
         r for r in routines_result.scalars().all()
-        if routine_runs_today(r, current_weekday, overrides=overrides, target=today)
+        if routine_runs_today(
+            r,
+            current_weekday,
+            overrides=overrides,
+            target=today,
+            is_school_day=today_is_school,
+        )
     ]
-    completed_ids = await completed_routine_ids_today(db, todays_routines, today)
+    completed_ids = await completed_routine_ids_today(
+        db, todays_routines, today, is_school_day=today_is_school
+    )
 
     # Compute consecutive-day streak per routine (only when assigned).
     active_routines: list[dict] = []
@@ -175,12 +186,21 @@ async def get_dashboard(
         streak = 0
         if routine.profile_id is not None:
             streak = await compute_current_streak(
-                db, routine, routine.profile_id, today, overrides=overrides
+                db,
+                routine,
+                routine.profile_id,
+                today,
+                overrides=overrides,
+                school_day_ctx=school_ctx,
             )
         # Show the count of steps actually applicable today, not the
         # routine's full step library — a Mon-Fri "Pack backpack" step
-        # shouldn't be counted on Sundays.
-        applicable_count = len(applicable_step_ids(routine, current_weekday))
+        # shouldn't be counted on Sundays or school holidays.
+        applicable_count = len(
+            applicable_step_ids(
+                routine, current_weekday, is_school_day=today_is_school
+            )
+        )
         active_routines.append(
             {
                 "id": str(routine.id),

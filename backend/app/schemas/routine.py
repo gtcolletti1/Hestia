@@ -16,6 +16,7 @@ class RoutineStepBase(BaseModel):
     sort_order: int
     points_value: int = 0
     days_of_week: list[int] | None = None
+    school_day_only: bool = False
 
 
 class RoutineStepCreate(RoutineStepBase):

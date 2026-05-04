@@ -35,6 +35,7 @@ from app.services.routine_window import (
     load_active_overrides,
     current_time_block,
 )
+from app.services.school_day import load_school_day_context
 from app.schemas.splash import (
     SplashClock,
     SplashDay,
@@ -213,12 +214,22 @@ async def _build_routines(
         )
     )
     overrides = await load_active_overrides(db, household_id, today)
+    school_ctx = await load_school_day_context(db, household_id, today.year)
+    today_is_school = school_ctx.is_school_day(today)
     todays_routines = [
         r for r in routines_result.scalars().all()
-        if routine_runs_today(r, current_weekday, overrides=overrides, target=today)
+        if routine_runs_today(
+            r,
+            current_weekday,
+            overrides=overrides,
+            target=today,
+            is_school_day=today_is_school,
+        )
     ]
 
-    completed_ids = await completed_routine_ids_today(db, todays_routines, today)
+    completed_ids = await completed_routine_ids_today(
+        db, todays_routines, today, is_school_day=today_is_school
+    )
     routines = [r for r in todays_routines if r.id not in completed_ids]
 
     # One streak walk per active routine. The set of "today" routines
@@ -229,7 +240,12 @@ async def _build_routines(
         streak = 0
         if r.profile_id is not None:
             streak = await compute_current_streak(
-                db, r, r.profile_id, today, overrides=overrides
+                db,
+                r,
+                r.profile_id,
+                today,
+                overrides=overrides,
+                school_day_ctx=school_ctx,
             )
 
         if r.profile is not None:
@@ -247,7 +263,11 @@ async def _build_routines(
                 id=r.id,
                 name=r.name,
                 time_block=r.time_block.value,
-                step_count=len(applicable_step_ids(r, current_weekday)),
+                step_count=len(
+                    applicable_step_ids(
+                        r, current_weekday, is_school_day=today_is_school
+                    )
+                ),
                 streak_days=streak,
                 assignee=assignee,
             )

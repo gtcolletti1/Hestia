@@ -119,6 +119,9 @@ interface StepInput {
   // null = inherit from the routine (run on every day the routine runs).
   // A non-null subset of the routine's days narrows the step to those days.
   days_of_week: number[] | null;
+  // True = step is hidden on weekends, federal holidays, and admin-marked
+  // school closures (e.g. "pack backpack" doesn't apply on snow days).
+  school_day_only: boolean;
 }
 
 type TimeBlock = "morning" | "afternoon" | "evening" | "bedtime";
@@ -178,6 +181,7 @@ export default function RoutineForm({
         icon: s.icon ?? "",
         points_value: s.points_value ?? 0,
         days_of_week: s.days_of_week ?? null,
+        school_day_only: s.school_day_only ?? false,
       }));
     }
     if (template) {
@@ -187,10 +191,18 @@ export default function RoutineForm({
         icon: s.icon ?? "",
         points_value: s.points_value ?? 0,
         days_of_week: null,
+        school_day_only: false,
       }));
     }
     return [
-      { key: newStepKey(), label: "", icon: "", points_value: 0, days_of_week: null },
+      {
+        key: newStepKey(),
+        label: "",
+        icon: "",
+        points_value: 0,
+        days_of_week: null,
+        school_day_only: false,
+      },
     ];
   });
 
@@ -238,7 +250,14 @@ export default function RoutineForm({
   const addStep = () =>
     setSteps((prev) => [
       ...prev,
-      { key: newStepKey(), label: "", icon: "", points_value: 0, days_of_week: null },
+      {
+        key: newStepKey(),
+        label: "",
+        icon: "",
+        points_value: 0,
+        days_of_week: null,
+        school_day_only: false,
+      },
     ]);
 
   const removeStep = (key: string) =>
@@ -291,6 +310,7 @@ export default function RoutineForm({
         // Only persist a step-level filter when it's actually narrower
         // than the routine; null means "every routine day".
         days_of_week: s.days_of_week,
+        school_day_only: s.school_day_only,
       }));
 
     saveMutation.mutate({
@@ -544,6 +564,35 @@ export default function RoutineForm({
                     </button>
                   )}
                 </div>
+
+                {/* School-day-only toggle — hides this step on weekends,
+                    US federal holidays, and admin-marked school closures
+                    (snow days etc.). Useful for "pack backpack", "lunchbox". */}
+                <label className="mt-2 flex items-center gap-2 pl-7 text-xs text-gray-500 dark:text-gray-400">
+                  <input
+                    type="checkbox"
+                    checked={step.school_day_only}
+                    onChange={(e) =>
+                      setSteps((prev) =>
+                        prev.map((s) =>
+                          s.key === step.key
+                            ? { ...s, school_day_only: e.target.checked }
+                            : s,
+                        ),
+                      )
+                    }
+                    className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-400"
+                  />
+                  <span>
+                    Only on school days
+                    <span
+                      className="ml-1 cursor-help text-gray-400"
+                      title="Skipped on weekends, US federal holidays, and admin-marked school closures."
+                    >
+                      ⓘ
+                    </span>
+                  </span>
+                </label>
               </div>
             );
           })}
