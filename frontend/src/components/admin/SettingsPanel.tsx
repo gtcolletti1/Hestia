@@ -6,6 +6,7 @@ import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useThemeStore } from "@/stores/themeStore";
 import SplashSettingsSection from "./SplashSettingsSection";
+import InstallPromptButton from "@/components/common/InstallPromptButton";
 import type { SplashCalendarMode, SplashMode } from "@/types/splash";
 
 type Theme = "light" | "dark";
@@ -1010,6 +1011,16 @@ export default function SettingsPanel() {
               💾 Backup &amp; Restore
             </h4>
             <BackupRestoreSection />
+          </div>
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              📲 Install as App
+            </h4>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+              Install Hestia as a standalone app on this device for full-screen
+              kiosk use and continued read-only access while offline.
+            </p>
+            <InstallPromptButton />
           </div>
         </div>
       </section>

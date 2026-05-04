@@ -3,6 +3,7 @@ import { Routes, Route } from "react-router-dom";
 import AppShell from "@/components/layout/AppShell";
 import KioskWrapper from "@/components/layout/KioskWrapper";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import OfflineBanner from "@/components/common/OfflineBanner";
 import SetupWizard from "@/components/onboarding/SetupWizard";
 import ProfileSelector from "@/components/onboarding/ProfileSelector";
 import HouseholdPicker from "@/components/onboarding/HouseholdPicker";
@@ -122,5 +123,10 @@ export default function App() {
   // Single top-level KioskWrapper so the screensaver overlay (and its
   // auto-logout side effect) survives the re-renders triggered by login,
   // logout, and boot-state transitions.
-  return <KioskWrapper>{renderContent()}</KioskWrapper>;
+  return (
+    <>
+      <OfflineBanner />
+      <KioskWrapper>{renderContent()}</KioskWrapper>
+    </>
+  );
 }

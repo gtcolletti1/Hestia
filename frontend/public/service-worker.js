@@ -1,11 +1,16 @@
 // Family Hub — Service Worker
 // Implements offline-first caching with background sync replay.
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const STATIC_CACHE = `family-hub-static-${CACHE_VERSION}`;
 const API_CACHE = `family-hub-api-${CACHE_VERSION}`;
 const QUEUE_DB_NAME = "family-hub-offline-queue";
 const QUEUE_STORE = "requests";
+
+// Mutating endpoints we should NEVER queue for replay — admin imports,
+// backup operations, and auth flows would silently corrupt state if they
+// landed late. Better to fail loudly while offline.
+const NEVER_QUEUE_PREFIXES = ["/api/admin/", "/api/auth/"];
 
 // Assets to pre-cache on install
 const PRECACHE_URLS = ["/", "/index.html", "/manifest.json"];
@@ -104,9 +109,22 @@ async function staleWhileRevalidate(request) {
 }
 
 async function networkWithOfflineQueue(request) {
+  const url = new URL(request.url);
   try {
     return await fetch(request);
   } catch {
+    // Sensitive endpoints (admin import, auth) MUST NOT be silently
+    // queued — replaying a stale auth token or replaying a destructive
+    // restore would corrupt state. Surface the failure to the caller.
+    if (NEVER_QUEUE_PREFIXES.some((p) => url.pathname.startsWith(p))) {
+      return new Response(
+        JSON.stringify({ detail: "Offline — please retry when reconnected." }),
+        {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
     // Network unavailable — queue the request for replay
     await saveRequestToQueue(request);
     return new Response(JSON.stringify({ queued: true }), {

@@ -433,6 +433,25 @@ A "Lock now" control is available from the header profile dropdown for any logge
 - Weather follows the existing 30-min cadence.
 - A failed fetch leaves the previous data in place and shows a small unobtrusive "stale" indicator with the last-success timestamp; it does not blank the screen.
 
+### 2.13 Progressive Web App & Offline
+
+> *"When the home Wi-Fi blips for thirty seconds, the wall display shouldn't show a white error page — it should keep showing dinner and tomorrow's calendar."*
+
+**US-2.13.1: Installable App**
+- Hestia ships a Web App Manifest (`name`, `short_name`, `start_url=/`, `display=standalone`, landscape orientation, theme + background colors) and PWA icons.
+- A service worker is registered automatically in production (skipped in `vite dev` to avoid HMR conflicts).
+- Settings → System surfaces an "Install Hestia on this device" button when the browser supports installation and Hestia isn't already installed; the button hides itself afterward.
+
+**US-2.13.2: Offline-First Caching**
+- App shell (HTML, hashed JS/CSS) is cached on first online load (cache-first), so the wall display reopens cleanly through brief outages.
+- API GETs use stale-while-revalidate: the last successful response renders immediately while a fresh fetch updates the cache in the background. When fully offline, the cached body is returned.
+- API mutations (POST / PUT / DELETE) try the network first; on failure they're enqueued in IndexedDB and replayed when the device returns online (`navigator.onLine` → SW message).
+- High-risk endpoints (`/api/admin/*`, `/api/auth/*`) are explicitly excluded from the offline replay queue and instead return `503` while offline — silently re-running an admin import or stale auth flow would corrupt state.
+- A small amber banner pinned to the top of the viewport announces the offline state and reminds the user that their changes will be saved on reconnect.
+
+**US-2.13.3: Cache Invalidation Hygiene**
+- Service worker and Web App Manifest are served with `Cache-Control: no-cache` (vs. the immutable hash-cached app bundles), so the SW always revalidates and a deploy with a bumped `CACHE_VERSION` cleanly evicts older runtime caches in `activate`.
+
 ---
 
 ## 3. Admin & Configuration
@@ -765,7 +784,7 @@ Every screen must handle these gracefully:
 ### Phase 2 — Multi-Service Sync & Polish
 - [ ] Two-way Google Calendar sync (write-back)
 - [ ] Apple Calendar (CalDAV) and Outlook (Microsoft Graph) sync
-- [ ] PWA with offline support and install prompt
+- [x] PWA with offline support and install prompt (US-2.13)
 - [ ] Push notifications to companion devices
 - [x] Drag-and-drop reordering for list items and routine steps
 - [ ] Photo integration with Google Photos album
