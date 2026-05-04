@@ -3,7 +3,9 @@
 
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
+from functools import lru_cache
 
+import holidays
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,6 +91,45 @@ async def update_settings(
     await db.flush()
     await db.refresh(household)
     return _load_settings(household)
+
+
+@lru_cache(maxsize=1)
+def _holiday_options() -> dict[str, object]:
+    """Build the country/subdivision option list once per process.
+
+    Returns a mapping with two keys:
+      - ``countries``: list of supported 2-letter ISO 3166-1 alpha-2
+        country codes (the ``holidays`` package also exposes 3-letter
+        aliases; we drop those to keep the dropdown clean).
+      - ``subdivisions``: ``{country_code: [subdiv_code, ...]}`` for
+        every country that has admin subdivisions (US states, CA
+        provinces, etc.). Countries with no subdivisions are omitted.
+    """
+    raw = holidays.utils.list_supported_countries()
+    countries: list[str] = []
+    subdivisions: dict[str, list[str]] = {}
+    for code, subs in raw.items():
+        if len(code) != 2 or not code.isalpha() or not code.isupper():
+            continue  # skip 3-letter aliases like "USA", "AFG"
+        countries.append(code)
+        if subs:
+            subdivisions[code] = list(subs)
+    countries.sort()
+    return {"countries": countries, "subdivisions": subdivisions}
+
+
+@router.get("/admin/holiday-options")
+async def get_holiday_options(
+    current_profile: Profile = Depends(get_current_profile),
+) -> dict[str, object]:
+    """List supported holiday-calendar countries + subdivisions.
+
+    Drives the AdminPage holiday-calendar picker. The set of countries
+    and subdivisions comes straight from the ``holidays`` Python
+    package, so the dropdown stays in sync with whatever calendars
+    that library knows about.
+    """
+    return _holiday_options()
 
 
 @router.patch("/admin/modules", response_model=HouseholdSettings)

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { admin, integrations as integrationsApi, photos as photosApi } from "@/api/endpoints";
@@ -748,6 +748,9 @@ export default function SettingsPanel() {
       {/* Vacation Mode (Phase C parental override) */}
       <VacationModeSection householdId={householdId} />
 
+      {/* Holiday calendar source for school-day detection */}
+      <HolidayCalendarSection householdId={householdId} />
+
       {/* School-day calendar (snow days, in-service days, etc.) */}
       <SchoolClosuresSection householdId={householdId} />
 
@@ -1456,6 +1459,137 @@ function SchoolClosuresSection({ householdId }: { householdId: string | null }) 
           className="touch-target rounded-xl bg-blue-600 px-5 py-2 font-semibold text-white shadow transition hover:opacity-90 active:scale-95 disabled:opacity-50"
         >
           Add Closure
+        </button>
+      </div>
+    </section>
+  );
+}
+
+
+// ── Holiday Calendar (drives school_day_only step filter) ─────────────────────
+
+function HolidayCalendarSection({ householdId }: { householdId: string | null }) {
+  const queryClient = useQueryClient();
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings", householdId],
+    queryFn: async () => (await admin.getSettings(householdId!)).data,
+    enabled: !!householdId,
+  });
+
+  const { data: options } = useQuery({
+    queryKey: ["admin-holiday-options"],
+    queryFn: async () => (await admin.getHolidayOptions()).data,
+  });
+
+  const currentCountry =
+    (settingsData as { holiday_country?: string } | undefined)?.holiday_country ?? "US";
+  const currentSubdiv =
+    (settingsData as { holiday_subdiv?: string | null } | undefined)?.holiday_subdiv ?? "";
+
+  const [country, setCountry] = useState<string>(currentCountry);
+  const [subdiv, setSubdiv] = useState<string>(currentSubdiv ?? "");
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  // Resync local state when the server values arrive / change.
+  useEffect(() => {
+    setCountry(currentCountry);
+    setSubdiv(currentSubdiv ?? "");
+  }, [currentCountry, currentSubdiv]);
+
+  const countryNames = useMemo(() => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const dn = new (Intl as any).DisplayNames(["en"], { type: "region" });
+      return (code: string) => dn.of(code) ?? code;
+    } catch {
+      return (code: string) => code;
+    }
+  }, []);
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      admin.updateSettings(householdId!, {
+        holiday_country: country,
+        holiday_subdiv: subdiv ? subdiv : null,
+      }),
+    onSuccess: () => {
+      setSavedAt(Date.now());
+      queryClient.invalidateQueries({ queryKey: ["settings", householdId] });
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["splash"] });
+    },
+  });
+
+  const subdivOptions = options?.subdivisions?.[country] ?? [];
+  const dirty =
+    country !== currentCountry || (subdiv || null) !== (currentSubdiv || null);
+
+  return (
+    <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+        🗓️ Holiday Calendar
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Routine steps marked <em>"Only on school days"</em> are hidden on
+        the holidays for this country (and optional state/region).
+        Defaults to US federal holidays.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label className="text-sm text-gray-700 dark:text-gray-300">
+          Country
+          <select
+            value={country}
+            onChange={(e) => {
+              setCountry(e.target.value);
+              setSubdiv("");
+            }}
+            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2"
+          >
+            {(options?.countries ?? [country]).map((c) => (
+              <option key={c} value={c}>
+                {countryNames(c)} ({c})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="text-sm text-gray-700 dark:text-gray-300">
+          State / region
+          <select
+            value={subdiv}
+            onChange={(e) => setSubdiv(e.target.value)}
+            disabled={subdivOptions.length === 0}
+            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 disabled:opacity-50"
+          >
+            <option value="">
+              {subdivOptions.length === 0
+                ? "(no subdivisions)"
+                : "National only"}
+            </option>
+            {subdivOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="mt-4 flex items-center justify-end gap-3">
+        {savedAt && !dirty && (
+          <span className="text-xs text-emerald-600 dark:text-emerald-400">
+            Saved
+          </span>
+        )}
+        <button
+          disabled={!householdId || !dirty || saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+          className="touch-target rounded-xl bg-blue-600 px-5 py-2 font-semibold text-white shadow transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+        >
+          {saveMutation.isPending ? "Saving…" : "Save"}
         </button>
       </div>
     </section>

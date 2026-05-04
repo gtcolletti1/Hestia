@@ -47,6 +47,13 @@ class HouseholdSettings(BaseModel):
     splash_show_weather: bool = True
     splash_show_messages: bool = False
 
+    # Holiday calendar (PRD §school-day filter). Used by
+    # ``app.services.school_day`` to detect non-school days. Defaults
+    # match the US federal calendar; admins can pick a country and an
+    # optional subdivision (e.g. US state) from the AdminPage.
+    holiday_country: str = "US"
+    holiday_subdiv: str | None = None
+
 
 class HouseholdSettingsUpdate(BaseModel):
     name: str | None = None
@@ -70,6 +77,9 @@ class HouseholdSettingsUpdate(BaseModel):
     splash_show_meals: bool | None = None
     splash_show_weather: bool | None = None
     splash_show_messages: bool | None = None
+
+    holiday_country: str | None = None
+    holiday_subdiv: str | None = None
 
 
 class ModuleToggle(BaseModel):

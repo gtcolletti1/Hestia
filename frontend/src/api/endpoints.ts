@@ -339,6 +339,12 @@ export const admin = {
     client.patch("/admin/modules", data, {
       params: { household_id: householdId },
     }),
+
+  getHolidayOptions: () =>
+    client.get<{
+      countries: string[];
+      subdivisions: Record<string, string[]>;
+    }>("/admin/holiday-options"),
 };
 
 // --- Auth ---
