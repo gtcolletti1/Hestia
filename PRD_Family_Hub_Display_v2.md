@@ -176,6 +176,19 @@ Three override kinds, all admin-only writes, all surfaced as `RoutineOverride` r
 
 **Done means (overall):** a routine with days_of_week=[0,1,2,3,4] (weekdays) does NOT appear on the dashboard on Saturday/Sunday. A 5-point step completed by a child immediately shows +5 in their point balance. Re-opening that routine shows the step pre-checked, with no second point award.
 
+**US-2.3.7: School-Day Awareness**
+
+> *"On a snow day or federal holiday, the 'pack backpack' part of the morning routine should disappear — but brushing teeth and getting dressed still apply."*
+
+- Each `RoutineStep` carries a `school_day_only: bool` flag (default `false`). When `true`, the step is suppressed on weekends, US federal holidays (or whichever calendar the household has selected — see §3.1), and admin-marked closures.
+- Closures are persisted in a `school_closures` table (one row per non-school date, with optional reason like "Snow day" or "Teacher in-service"), managed from a Settings panel section.
+- A routine whose only remaining applicable steps are all `school_day_only` on a non-school day is treated as "no applicable steps today": it does not appear on Splash/Home, and the streak walk-back treats the day as non-scheduled (the streak is preserved, never extended).
+- Splash + Home show a small banner ("No school today — Martin Luther King Jr. Day · 3 school-day steps hidden") when a holiday or closure is active. Weekends never trigger the banner (they're already obvious).
+- The routine editor exposes a per-step "Only on school days" checkbox plus a one-click bulk toggle in the Steps section header that flips every step at once.
+- Holiday calendar source is admin-configurable via a Settings dropdown (country + optional state/region), backed by the Python `holidays` package; defaults to **US, federal-only** for new households.
+
+**Done means:** with `holiday_country=US` selected and a school routine that has "Brush teeth" (everyday) + "Pack backpack" (school-day only): on a regular Wednesday both steps appear; on Thanksgiving the routine still appears with just "Brush teeth"; on a snow day added via Settings the banner appears and "Pack backpack" is hidden; the kid's streak is unchanged either way.
+
 ### 2.4 Points & Rewards Store
 
 > *"As a child, I earn points by completing chores and spend them on rewards my parents set up."*
@@ -436,13 +449,18 @@ Stored as a JSON object on the household record:
   "splash_show_routines": true,
   "splash_show_meals": false,
   "splash_show_weather": true,
-  "splash_show_messages": false
+  "splash_show_messages": false,
+
+  "holiday_country": "US",
+  "holiday_subdiv": null
 }
 ```
 
 The household `timezone` (IANA name) is the **primary source of truth** for date-bucketing on the dashboard agenda, routine "today" matching, and meal-plan "today" lookups. `time_format` controls 12h/24h rendering throughout the UI.
 
 The `splash_*` keys govern the pre-login splash and disclosure policy (see §2.12). The legacy top-level `privacy_mode` boolean is **deprecated and removed** as of v2.2; an Alembic migration maps existing `privacy_mode = true` to `splash_calendar_mode = "busy_only"` and `privacy_mode = false` to `splash_calendar_mode = "off"`.
+
+The `holiday_country` (ISO 3166-1 alpha-2) and optional `holiday_subdiv` (e.g. US state code `"MA"`) drive the school-day filter for `school_day_only` routine steps (US-2.3.7). Editable from Settings via a dropdown sourced from `GET /api/admin/holiday-options`.
 
 ### 3.2 Module Toggles
 
@@ -468,9 +486,11 @@ Household
 ├── SourceCalendar (provider, external_id, is_read_only, is_visible)
 │   └── Event (title, start_time, end_time, location, recurrence_rule, all_day)
 │       └── Reminder (minutes_before, fire_at, is_fired)
-├── Routine (name, time_block, days_of_week[], start_time, is_active)
-│   ├── RoutineStep (label, icon, points_value, sort_order)
-│   └── RoutineCompletion (profile_id, date, completed_steps[], is_fully_completed)
+├── Routine (name, time_block, days_of_week[], start_time, is_active, pausable_on_vacation)
+│   ├── RoutineStep (label, icon, points_value, sort_order, days_of_week[], school_day_only)
+│   ├── RoutineCompletion (profile_id, date, completed_steps[], is_fully_completed)
+│   └── RoutineOverride (kind, start_date, end_date, reason)   # routine_id NULL = household-wide
+├── SchoolClosure (date, reason)
 ├── TaskList (name, category, is_archived)
 │   └── ListItem (text, is_checked, assigned_profile_id, due_date)
 ├── MealPlan (date, meal_type, title, description, recipe_url)
@@ -548,6 +568,8 @@ Household
 | GET | `/api/notifications/upcoming` | Reminders due in next 24h |
 | GET | `/api/splash` | **Unauthenticated** composite read-only endpoint for the splash. Returns greeting/clock context, today + upcoming-day agenda (capped by `splash_agenda_max_days`), today's routines, optional meals/weather/messages — already filtered server-side by `splash_calendar_mode` and per-section toggles. Cache-Control: `public, max-age=30`. Must never leak fields hidden by policy (security boundary). |
 | GET/PUT | `/api/admin/settings` | Household settings JSON |
+| GET | `/api/admin/holiday-options` | `{countries: [CC], subdivisions: {CC: [SUB]}}` for the holiday calendar picker (US-2.3.7). Cached. |
+| GET/POST/DELETE | `/api/admin/school-closures` | CRUD for admin-marked non-school dates (snow days, in-service days). See US-2.3.7. |
 | PATCH | `/api/admin/modules` | Enable/disable modules |
 
 ---
@@ -704,6 +726,16 @@ Every screen must handle these gracefully:
 - [x] `pausable_on_vacation` opt-out per routine (medications, allergy meds keep running)
 - [x] Override-aware streak walk (paused/skipped days don't break streaks)
 
+### Phase 1.7 — School-Day Awareness ✅ shipped
+- [x] `RoutineStep.school_day_only` flag (US-2.3.7) hides the step on weekends, holidays, and admin-marked closures
+- [x] `school_closures` table + admin Settings CRUD section for snow days / in-service days
+- [x] Admin Settings: country + state/region holiday calendar picker (`GET /api/admin/holiday-options`, sourced from the `holidays` package; defaults to US federal)
+- [x] Splash + Home banner ("No school today — *holiday* · *N* school-day steps hidden") for holidays/closures only — weekends skipped (already obvious)
+- [x] Routines whose only remaining steps are all `school_day_only` on a non-school day are dropped from Splash/Home and treated as non-scheduled by the streak walk (streak preserved, never extended)
+- [x] Per-step "Only on school days" checkbox + bulk-toggle button in the routine editor
+- [x] 🎉 "All routines done" celebratory empty-state card on Splash + Home when today's scheduled routines are all complete
+- [x] Profile-colored streak chip on Splash routine pills (`<name> · 🔥 N`) — replaced the standalone amber badge
+
 ### Phase 2 — Multi-Service Sync & Polish
 - [ ] Two-way Google Calendar sync (write-back)
 - [ ] Apple Calendar (CalDAV) and Outlook (Microsoft Graph) sync
@@ -744,3 +776,6 @@ Every screen must handle these gracefully:
 | **Splash** | The device's pre-login ambient view. Renders the Ambient agenda, the photo frame, or alternates between them per admin setting. Source of truth for what passersby can see. |
 | **Pre-Login Privacy Policy** | Admin-controlled disclosure rules (calendar mode + per-section toggles) applied server-side to the unauthenticated `/api/splash` endpoint. Replaces the v2.1 post-login privacy mode. |
 | **Lock Now** | Header action that logs out the current profile and returns the device to the splash on demand, without waiting for the screensaver timeout. |
+| **School Day** | A weekday that is neither a holiday from the household's selected `holiday_country` / `holiday_subdiv` calendar nor an admin-marked `SchoolClosure`. Used to gate `school_day_only` routine steps (US-2.3.7). |
+| **School Closure** | An admin-entered non-school date (snow day, in-service day, parent-teacher conference) stored in the `school_closures` table with an optional reason. |
+| **Holiday Calendar** | The country (and optional state/region) selected in admin settings (`holiday_country` / `holiday_subdiv`); resolved at runtime via the Python `holidays` package. |
