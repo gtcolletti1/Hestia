@@ -433,7 +433,26 @@ export default function RoutineForm({
 
       {/* Steps Editor */}
       <div>
-        <span className="mb-2 block text-sm font-medium">Steps</span>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="block text-sm font-medium">Steps</span>
+          {steps.length > 0 && (() => {
+            const allOn = steps.every((s) => s.school_day_only);
+            return (
+              <button
+                type="button"
+                onClick={() =>
+                  setSteps((prev) =>
+                    prev.map((s) => ({ ...s, school_day_only: !allOn }))
+                  )
+                }
+                className="rounded-md px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-900/30"
+                title="Toggle 'Only on school days' for every step at once"
+              >
+                {allOn ? "✓ Mark all as everyday" : "🎒 Mark all school-day only"}
+              </button>
+            );
+          })()}
+        </div>
         <div className="space-y-2">
           {steps.map((step, index) => {
             const stepDays = step.days_of_week ?? daysOfWeek;
