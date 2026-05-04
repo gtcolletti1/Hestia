@@ -32,3 +32,21 @@ class UpcomingNotification(BaseModel):
     event_start: dt.datetime
     minutes_before: int
     fire_at: dt.datetime
+
+
+class InboxEntry(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    household_id: uuid.UUID
+    profile_id: uuid.UUID | None
+    kind: str
+    title: str
+    body: str | None
+    link_url: str | None
+    created_at: dt.datetime
+    read_at: dt.datetime | None
+
+
+class InboxUnreadCount(BaseModel):
+    unread: int

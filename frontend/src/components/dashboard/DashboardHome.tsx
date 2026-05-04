@@ -8,6 +8,7 @@ import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import WeatherWidget from "./WeatherWidget";
 import MessagesWidget from "./MessagesWidget";
 import LeaderboardWidget from "./LeaderboardWidget";
+import NotificationBell from "./NotificationBell";
 import RoutineStepper from "@/components/routines/RoutineStepper";
 import type {
   DashboardData,
@@ -302,11 +303,14 @@ export default function DashboardHome() {
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
-      <header>
-        <h1 className="text-3xl font-bold">{getGreeting()}</h1>
-        <p className="text-gray-500 dark:text-gray-400">
-          {format(new Date(), "EEEE, MMMM d")}
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">{getGreeting()}</h1>
+          <p className="text-gray-500 dark:text-gray-400">
+            {format(new Date(), "EEEE, MMMM d")}
+          </p>
+        </div>
+        <NotificationBell />
       </header>
 
       {isError && (

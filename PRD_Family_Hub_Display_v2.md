@@ -350,7 +350,16 @@ Three override kinds, all admin-only writes, all surfaced as `RoutineOverride` r
 
 **US-2.11.2: Upcoming Notifications**
 - API endpoint returns notifications due in the next 24 hours.
-- Dashboard could show a notification bell with count (Phase 2).
+
+**US-2.11.3: Notification Bell Inbox**
+
+> *"While I'm prepping dinner I want to glance at the wall display and see what just happened — the soccer-practice alarm fired ten minutes ago, the calendar sync errored, no surprises."*
+
+- The dashboard header shows a 🔔 bell with a red badge counting unread notifications visible to the signed-in profile.
+- Clicking the bell opens a drop-down listing the most recent 20 entries (kind icon, title, body, relative timestamp). Unread entries are tinted; "Mark all read" clears the badge.
+- A persistent `notification_entries` table backs the inbox: rows are scoped to a household and optionally to a single profile (`profile_id IS NULL` = visible to everyone in the household).
+- Reminder firing automatically inserts a household-wide entry (`kind="reminder"`) so the bell shows event history rather than only ephemeral toasts.
+- Future producers (sync errors, household info messages) drop rows into the same table and immediately appear in the bell.
 
 ### 2.12 Splash & Pre-Login Privacy
 
@@ -579,6 +588,10 @@ Household
 | PATCH | `/api/lists/:id/items/:id/toggle` | Toggle checked state |
 | GET | `/api/weather` | Proxied weather data |
 | GET | `/api/notifications/upcoming` | Reminders due in next 24h |
+| GET | `/api/notifications/inbox` | Persistent notification log (per-profile + household-wide). Supports `unread_only` and `limit`. |
+| GET | `/api/notifications/inbox/unread_count` | Bell badge counter for the signed-in profile (US-2.11.3). |
+| POST | `/api/notifications/inbox/{id}/read` | Mark a single inbox entry read. |
+| POST | `/api/notifications/inbox/mark_all_read` | Clear all unread entries visible to the signed-in profile. |
 | GET | `/api/splash` | **Unauthenticated** composite read-only endpoint for the splash. Returns greeting/clock context, today + upcoming-day agenda (capped by `splash_agenda_max_days`), today's routines, optional meals/weather/messages — already filtered server-side by `splash_calendar_mode` and per-section toggles. Cache-Control: `public, max-age=30`. Must never leak fields hidden by policy (security boundary). |
 | GET/PUT | `/api/admin/settings` | Household settings JSON |
 | GET | `/api/admin/holiday-options` | `{countries: [CC], subdivisions: {CC: [SUB]}}` for the holiday calendar picker (US-2.3.7). Cached. |
@@ -758,7 +771,7 @@ Every screen must handle these gracefully:
 - [ ] Photo integration with Google Photos album
 - [x] Export/import household data (JSON backup)
 - [x] Chore assignment per profile (per-step `assigned_profile_id`, US-2.3.8)
-- [ ] Notification bell on dashboard with badge count
+- [x] Notification bell on dashboard with badge count (US-2.11.3)
 
 ### Phase 3 — Automation & Intelligence
 - [ ] Home Assistant integration (webhooks, REST sensor)

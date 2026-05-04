@@ -488,6 +488,24 @@ export const notifications = {
     client.get("/notifications/upcoming", {
       params: { household_id: householdId },
     }),
+  inbox: (householdId: string, opts?: { unread_only?: boolean; limit?: number }) =>
+    client.get("/notifications/inbox", {
+      params: {
+        household_id: householdId,
+        unread_only: opts?.unread_only ?? false,
+        limit: opts?.limit ?? 50,
+      },
+    }),
+  inboxUnreadCount: (householdId: string) =>
+    client.get("/notifications/inbox/unread_count", {
+      params: { household_id: householdId },
+    }),
+  inboxMarkRead: (entryId: string) =>
+    client.post(`/notifications/inbox/${entryId}/read`),
+  inboxMarkAllRead: (householdId: string) =>
+    client.post("/notifications/inbox/mark_all_read", null, {
+      params: { household_id: householdId },
+    }),
 };
 
 // --- Rewards ---
