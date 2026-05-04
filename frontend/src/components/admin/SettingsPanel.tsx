@@ -754,9 +754,6 @@ export default function SettingsPanel() {
       {/* School-day calendar (snow days, in-service days, etc.) */}
       <SchoolClosuresSection householdId={householdId} />
 
-      {/* JSON backup / restore */}
-      <BackupRestoreSection />
-
       {/* Calendar & Outlook Integrations */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -1008,19 +1005,11 @@ export default function SettingsPanel() {
               hearth and home.
             </p>
           </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              className="rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium py-3 px-4 min-h-[44px] text-sm transition-colors"
-            >
-              Backup Data
-            </button>
-            <button
-              type="button"
-              className="rounded-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 font-medium py-3 px-4 min-h-[44px] text-sm transition-colors"
-            >
-              Restore Data
-            </button>
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+              💾 Backup &amp; Restore
+            </h4>
+            <BackupRestoreSection />
           </div>
         </div>
       </section>
@@ -1682,11 +1671,8 @@ function BackupRestoreSection() {
   const busy = status.kind === "exporting" || status.kind === "importing";
 
   return (
-    <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-        💾 Backup & Restore
-      </h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+    <div>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
         Export a JSON snapshot of everything in this household, or restore from
         one. Sync tokens and saved OAuth credentials are excluded.
       </p>
@@ -1727,6 +1713,6 @@ function BackupRestoreSection() {
           ✗ {status.message}
         </p>
       )}
-    </section>
+    </div>
   );
 }
