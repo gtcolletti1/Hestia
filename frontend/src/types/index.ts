@@ -120,6 +120,12 @@ export interface DashboardRoutine {
   streak_days?: number;
 }
 
+export interface VacationStatus {
+  active: boolean;
+  reason?: string | null;
+  end_date?: string | null;
+}
+
 export interface DashboardData {
   date: string;
   profiles: Profile[];
@@ -131,6 +137,7 @@ export interface DashboardData {
     item_count: number;
     checked_count: number;
   }[];
+  vacation?: VacationStatus | null;
 }
 
 export interface AgendaBucket {

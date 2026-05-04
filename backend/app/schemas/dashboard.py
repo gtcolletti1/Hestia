@@ -44,6 +44,17 @@ class ActiveListSummary(BaseModel):
     checked_count: int
 
 
+class VacationStatus(BaseModel):
+    """Set on /api/dashboard and /api/splash when an active household-wide
+    pause override (kind=pause, routine_id=null) covers today, so the
+    home/splash views can show a 🏝 banner explaining why pausable
+    routines are missing."""
+
+    active: bool
+    reason: str | None = None
+    end_date: dt.date | None = None  # None = indefinite
+
+
 class DashboardResponse(BaseModel):
     date: dt.date
     profiles: list[ProfileSummary]
@@ -51,3 +62,4 @@ class DashboardResponse(BaseModel):
     active_routines: list[dict]
     today_meals: list[MealPlanResponse]
     active_lists: list[ActiveListSummary]
+    vacation: VacationStatus | None = None

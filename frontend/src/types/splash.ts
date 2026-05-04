@@ -93,6 +93,12 @@ export interface SplashPolicy {
   show_messages: boolean;
 }
 
+export interface SplashVacation {
+  active: boolean;
+  reason?: string | null;
+  end_date?: string | null;
+}
+
 export interface SplashResponse {
   household_id: string;
   household_name: string;
@@ -103,4 +109,5 @@ export interface SplashResponse {
   messages: SplashMessage[] | null;
   weather: SplashWeather | null;
   policy: SplashPolicy;
+  vacation?: SplashVacation | null;
 }

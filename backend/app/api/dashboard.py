@@ -23,12 +23,14 @@ from app.schemas.dashboard import (
     DashboardResponse,
     EventSummary,
     ProfileSummary,
+    VacationStatus,
 )
 from app.services.routine_window import (
     applicable_step_ids,
     routine_runs_today,
     completed_routine_ids_today,
     compute_current_streak,
+    household_vacation_on,
     load_active_overrides,
     current_time_block,
 )
@@ -243,4 +245,13 @@ async def get_dashboard(
         active_routines=active_routines,
         today_meals=today_meals,
         active_lists=active_lists,
+        vacation=(
+            VacationStatus(
+                active=True,
+                reason=vac.reason,
+                end_date=vac.end_date,
+            )
+            if (vac := household_vacation_on(overrides, today)) is not None
+            else None
+        ),
     )

@@ -31,6 +31,7 @@ from app.services.routine_window import (
     routine_runs_today,
     completed_routine_ids_today,
     compute_current_streak,
+    household_vacation_on,
     load_active_overrides,
     current_time_block,
 )
@@ -44,6 +45,7 @@ from app.schemas.splash import (
     SplashResponse,
     SplashRoutine,
     SplashRoutineAssignee,
+    SplashVacation,
 )
 
 
@@ -351,6 +353,22 @@ async def get_splash(
             db, household.id, today, current_weekday, active_block
         )
 
+    # Vacation banner — surface an active household-wide pause so the
+    # splash can explain why pausable routines are missing today. Loaded
+    # unconditionally (cheap) so the banner appears even when the
+    # routines block is hidden by policy.
+    overrides_today = await load_active_overrides(db, household.id, today)
+    vac = household_vacation_on(overrides_today, today)
+    vacation: SplashVacation | None = (
+        SplashVacation(
+            active=True,
+            reason=vac.reason,
+            end_date=vac.end_date,
+        )
+        if vac is not None
+        else None
+    )
+
     meals: list[SplashMeal] | None = None
     if settings.splash_show_meals:
         meals = await _build_meals(db, household.id, today)
@@ -435,4 +453,5 @@ async def get_splash(
         meals=meals,
         weather=weather,
         messages=messages,
+        vacation=vacation,
     )

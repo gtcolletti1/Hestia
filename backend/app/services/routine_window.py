@@ -67,6 +67,23 @@ def routine_paused_on(
     return None
 
 
+def household_vacation_on(
+    overrides: Iterable[RoutineOverride], target: date
+) -> RoutineOverride | None:
+    """Return the active household-wide *pause* override covering
+    ``target``, if any. Skip-today overrides and per-routine overrides
+    are ignored — this is just for the 🏝 banner on home/splash.
+    """
+    for ov in overrides:
+        if ov.routine_id is not None:
+            continue
+        if ov.kind != RoutineOverrideKind.pause:
+            continue
+        if ov.covers(target):
+            return ov
+    return None
+
+
 def current_time_block(local_time: time) -> TimeBlock:
     """Return the time block the given local clock time falls in.
 

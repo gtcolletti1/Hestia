@@ -101,6 +101,16 @@ class SplashPolicy(BaseModel):
     show_messages: bool
 
 
+class SplashVacation(BaseModel):
+    """Mirrors VacationStatus from the dashboard schema; included so
+    the unauthenticated splash can show a 🏝 banner without leaking the
+    list of suppressed routines."""
+
+    active: bool
+    reason: str | None = None
+    end_date: dt.date | None = None
+
+
 class SplashResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -116,3 +126,4 @@ class SplashResponse(BaseModel):
     meals: list[SplashMeal] | None = None
     weather: SplashWeather | None = None
     messages: list[SplashMessage] | None = None
+    vacation: SplashVacation | None = None

@@ -71,6 +71,11 @@ export default function RoutineList() {
   const [editingRoutine, setEditingRoutine] = useState<Routine | null>(null);
   const [selectedTemplate, setSelectedTemplate] =
     useState<RoutineTemplate | null>(null);
+  // Per-routine pause modal — replaces the old window.prompt() flow
+  // with a proper date picker + reason field.
+  const [pauseTarget, setPauseTarget] = useState<Routine | null>(null);
+  const [pauseUntil, setPauseUntil] = useState<string>("");
+  const [pauseReason, setPauseReason] = useState<string>("");
 
   const closeModal = () => {
     setModalMode("closed");
@@ -120,14 +125,19 @@ export default function RoutineList() {
       (await overridesApi.list(householdId!, { active_on: todayIso })).data,
     enabled: !!householdId,
   });
-  const overrideForRoutine = (routineId: string): RoutineOverride | undefined =>
-    overrides.find(
-      (o) =>
-        (o.routine_id === routineId ||
-          (o.routine_id === null /* household-wide */ === true)) &&
-        o.start_date <= todayIso &&
-        (o.end_date === null || o.end_date >= todayIso),
+  const overrideForRoutine = (routine: Routine): RoutineOverride | undefined => {
+    // Per-routine override always wins; otherwise a household-wide
+    // (vacation) override applies if this routine opts in.
+    const inRange = (o: RoutineOverride) =>
+      o.start_date <= todayIso &&
+      (o.end_date === null || o.end_date >= todayIso);
+    const direct = overrides.find(
+      (o) => o.routine_id === routine.id && inRange(o),
     );
+    if (direct) return direct;
+    if (routine.pausable_on_vacation === false) return undefined;
+    return overrides.find((o) => o.routine_id === null && inRange(o));
+  };
   const skipTodayMutation = useMutation({
     mutationFn: (routineId: string) =>
       overridesApi.create({
@@ -141,12 +151,21 @@ export default function RoutineList() {
     },
   });
   const pauseMutation = useMutation({
-    mutationFn: ({ routineId, until }: { routineId: string; until: string | null }) =>
+    mutationFn: ({
+      routineId,
+      until,
+      reason,
+    }: {
+      routineId: string;
+      until: string | null;
+      reason?: string;
+    }) =>
       overridesApi.create({
         routine_id: routineId,
         kind: "pause",
         start_date: todayIso,
         end_date: until,
+        reason: reason || undefined,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["routine-overrides"] });
@@ -376,18 +395,28 @@ export default function RoutineList() {
                           />
                         )}
                         {(() => {
-                          const ov = overrideForRoutine(routine.id);
+                          const ov = overrideForRoutine(routine);
                           if (!ov) return null;
+                          const isHousehold = ov.routine_id === null;
                           const label =
                             ov.kind === "skip"
                               ? "⏭ Skipped today"
-                              : ov.end_date
-                                ? `⏸ Paused until ${ov.end_date}`
-                                : "⏸ Paused";
+                              : isHousehold
+                                ? ov.end_date
+                                  ? `🏝 Vacation until ${ov.end_date}`
+                                  : "🏝 Vacation"
+                                : ov.end_date
+                                  ? `⏸ Paused until ${ov.end_date}`
+                                  : "⏸ Paused";
                           return (
                             <span
                               className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
-                              title={ov.reason ?? undefined}
+                              title={
+                                ov.reason ??
+                                (isHousehold
+                                  ? "Household-wide vacation override"
+                                  : undefined)
+                              }
                             >
                               {label}
                             </span>
@@ -396,7 +425,7 @@ export default function RoutineList() {
                       </div>
                       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         {isAdmin && (() => {
-                          const ov = overrideForRoutine(routine.id);
+                          const ov = overrideForRoutine(routine);
                           if (ov && ov.routine_id === routine.id) {
                             return (
                               <button
@@ -428,20 +457,9 @@ export default function RoutineList() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const days = prompt(
-                                    `Pause "${routine.name}" for how many days? (blank = indefinite)`,
-                                    "7",
-                                  );
-                                  if (days === null) return;
-                                  let until: string | null = null;
-                                  if (days.trim() !== "") {
-                                    const n = parseInt(days, 10);
-                                    if (Number.isNaN(n) || n < 1) return;
-                                    const d = new Date();
-                                    d.setDate(d.getDate() + n - 1);
-                                    until = d.toISOString().slice(0, 10);
-                                  }
-                                  pauseMutation.mutate({ routineId: routine.id, until });
+                                  setPauseTarget(routine);
+                                  setPauseUntil("");
+                                  setPauseReason("");
                                 }}
                                 className="touch-target rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-amber-600 dark:hover:bg-gray-700 dark:hover:text-amber-400"
                                 aria-label="Pause routine"
@@ -566,6 +584,84 @@ export default function RoutineList() {
               queryClient.invalidateQueries({ queryKey: ["routines"] });
             }}
           />
+        )}
+      </Modal>
+
+      {/* Per-routine pause modal — proper date picker + reason field
+          replacing the old window.prompt() flow. Leaving the date
+          empty creates an indefinite pause. */}
+      <Modal
+        open={pauseTarget !== null}
+        onClose={() => setPauseTarget(null)}
+        title={pauseTarget ? `Pause ${pauseTarget.name}` : "Pause routine"}
+      >
+        {pauseTarget && (
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const until = pauseUntil.trim() === "" ? null : pauseUntil;
+              if (until !== null && until < todayIso) return;
+              pauseMutation.mutate({
+                routineId: pauseTarget.id,
+                until,
+                reason: pauseReason.trim() || undefined,
+              });
+              setPauseTarget(null);
+            }}
+          >
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Pauses today through the end date. Leave the date blank for
+              an indefinite pause — the routine stays paused until you
+              tap Resume on the card.
+            </p>
+
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Resume on (optional)
+              </span>
+              <input
+                type="date"
+                min={todayIso}
+                value={pauseUntil}
+                onChange={(e) => setPauseUntil(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+              />
+              <span className="mt-1 block text-xs text-gray-400">
+                The routine reappears on this date.
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Reason (optional)
+              </span>
+              <input
+                type="text"
+                value={pauseReason}
+                onChange={(e) => setPauseReason(e.target.value)}
+                placeholder="e.g., out of town, sick day"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 dark:border-gray-600 dark:bg-gray-800"
+                maxLength={200}
+              />
+            </label>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setPauseTarget(null)}
+                className="touch-target rounded-lg px-4 py-2 text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="touch-target rounded-lg bg-amber-600 px-4 py-2 font-semibold text-white shadow hover:bg-amber-700 active:scale-95"
+              >
+                Pause
+              </button>
+            </div>
+          </form>
         )}
       </Modal>
     </div>

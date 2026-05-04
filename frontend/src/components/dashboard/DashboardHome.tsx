@@ -301,6 +301,25 @@ export default function DashboardHome() {
         </div>
       )}
 
+      {data?.vacation?.active && (
+        <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
+          <span className="text-2xl" aria-hidden>🏝</span>
+          <div className="flex-1">
+            <p className="font-semibold">
+              Household on vacation
+              {data.vacation.end_date
+                ? ` until ${format(parseISO(data.vacation.end_date), "EEE, MMM d")}`
+                : ""}
+            </p>
+            <p className="text-sm opacity-90">
+              {data.vacation.reason
+                ? data.vacation.reason
+                : "Pausable routines are hidden. Routines marked “Pause on vacation = off” keep running."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {!isLoading && !hasAnyModule && (
         <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-8 text-center">
           <p className="text-lg text-gray-400 dark:text-gray-500">

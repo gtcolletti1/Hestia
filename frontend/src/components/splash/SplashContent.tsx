@@ -30,17 +30,33 @@ interface SplashContentProps {
  * - The agenda block self-trims to fit the viewport (see ``AgendaBlock``).
  */
 export default function SplashContent({ data, timeFormat }: SplashContentProps) {
-  const { clock, days, routines, meals, weather, messages } = data;
+  const { clock, days, routines, meals, weather, messages, vacation } = data;
 
   const hasAgenda = days !== null && days.length > 0;
   const hasRoutines = routines !== null && routines.length > 0;
   const hasMeals = meals !== null && meals.length > 0;
   const hasWeather = weather !== null && weather.available;
   const hasMessages = messages !== null && messages.length > 0;
+  const onVacation = !!vacation?.active;
 
   return (
     <div className="relative flex h-full w-full flex-col gap-4 px-6 sm:px-8 pt-[38vh] pb-6 text-[color:var(--splash-text)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
       <ClockHeader iso={clock.iso_now} timeFormat={timeFormat} weather={weather} showWeather={hasWeather} />
+
+      {onVacation && (
+        <div className="flex items-center gap-3 rounded-2xl bg-amber-500/85 px-5 py-3 text-white shadow-lg backdrop-blur">
+          <span className="text-2xl" aria-hidden>🏝</span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold leading-tight">
+              Household on vacation
+              {vacation?.end_date ? ` until ${vacation.end_date}` : ""}
+            </p>
+            {vacation?.reason && (
+              <p className="truncate text-sm opacity-90">{vacation.reason}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid flex-1 min-h-0 grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Agenda spans 2/3 on wide screens — it's the most info-dense
