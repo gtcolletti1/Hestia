@@ -97,7 +97,7 @@ family-hub/
 
 - **Shared family calendar** — Day/week/month views, color-coded by person
 - **External calendar sync** — Google, Outlook, iCal/Apple Calendar
-- **Kid-friendly routines** — Step-by-step checklists with streaks
+- **Kid-friendly routines** — Step-by-step checklists with per-step day-of-week scheduling, scheduled-day streaks, and parental overrides (per-routine pause / skip-today and household-wide Vacation Mode). Routines marked `pausable_on_vacation = false` (e.g., medications) keep running through vacations. Stepper state is server-backed: re-opening a routine shows the steps you've already ticked, and routines done for the day disappear from Splash and Home.
 - **Shared lists** — Grocery, to-do, packing lists
 - **Meal planning** — Weekly meal view with assignments
 - **Pre-login splash with admin-controlled privacy** — Ambient agenda, photo frame, or alternating modes shown before login. Admin chooses what (if anything) is disclosed to passersby via per-section toggles and a calendar mode (`off` / `busy_only` / `hidden`). Live local weather and Hestia hearth backdrop included.

@@ -46,7 +46,7 @@ Hestia is a self-hosted, wall-mounted family command center — a free, privacy-
 **US-2.1.2: Sidebar Widgets**
 The right sidebar displays:
 - ☀️ **Weather** — current conditions and high/low for today (requires location to be configured in settings).
-- ✅ **Active Routines** — routines scheduled for today (matching `today ∈ days_of_week` AND `is_active = true`), showing name, time block, and step count.
+- ✅ **Active Routines** — routines scheduled for today (matching `today ∈ days_of_week` AND `is_active = true` AND no active pause/skip override), filtered to the current time block and *hiding routines already fully completed today*. Each row shows name, time block, current 🔥 streak, and is **tappable** — opens the full-screen stepper inline so a kid (or parent) can tick steps without navigating away from Home.
 - 🍽️ **Today's Meals** — meals planned for today by type (breakfast, lunch, dinner, snack).
 - 📋 **Active Lists** — non-archived lists with item count and completion progress.
 - 💬 **Messages** — most recent 3 pinned/latest notes.
@@ -107,6 +107,7 @@ A routine consists of:
 | profile_id | UUID | ✗ | Assigned person (null = household-wide) |
 | steps[] | RoutineStep[] | ✓ | At least one step |
 | is_active | boolean | ✓ | Default true |
+| pausable_on_vacation | boolean | ✓ | Default true. When false (e.g., medications, allergy meds), a household-wide vacation override does **not** suppress this routine — it keeps running. See US-2.3.5. |
 
 Each **step** has:
 
@@ -116,20 +117,25 @@ Each **step** has:
 | icon | string | ✗ | Emoji or icon identifier (curated emoji picker available in the editor) |
 | points_value | integer | ✓ | Points earned on completion (0 = no points) |
 | sort_order | integer | ✓ | Display order |
+| days_of_week | int[] \| null | ✗ | Per-step day-of-week gate. NULL/empty = "every day the parent routine runs". Lets a single weekday-and-weekend routine drop a step (e.g., "Pack backpack") on Sat/Sun without splitting it into two routines. See US-2.3.6. |
 
 **US-2.3.2: Routine Execution**
 - On the Routines page, active routines for today are grouped by time block.
-- Tapping a routine opens a full-screen stepper with large touch targets (min 44×44px).
+- Tapping a routine opens a full-screen stepper with large touch targets (min 44×44px). The same stepper opens from the Home routines widget so kids don't have to context-switch.
 - Each step shows the icon, label, and a checkmark. Tapping marks it complete.
+- **Stepper state is server-backed:** on open the stepper queries `GET /api/routines/today/completions?profile_id=…` and seeds checkboxes from the saved state. Re-opening a half-completed routine shows the existing checks (rather than misleadingly empty boxes); switching the profile selector reloads to that profile's progress.
 - Completing a step with `points_value > 0` immediately credits points to the logged-in profile's ledger.
 - Points are **idempotent** per step per day — completing the same step again does not double-award.
 - **Unchecking** a previously completed step does NOT refund points and does NOT permit re-awarding on subsequent re-check (no point farming).
-- Completing all steps marks the routine as fully completed for that day.
+- Completing all *applicable-today* steps (per-step `days_of_week` honored) marks the routine as fully completed for that day.
+- Routines whose applicable steps are all done today are **hidden from the Splash and the Home widget** and rendered with a green border + "✅ Done today" badge on the Routines page so admins can still inspect/edit them.
 
 **US-2.3.3: Streaks**
 - A streak counts consecutive **scheduled days** (per `days_of_week`) where the routine was fully completed.
-- Displayed on the routine card as "🔥 N-day streak."
+- Displayed on the routine card and inside the stepper as "🔥 N-day streak."
 - A missed scheduled day resets the streak to 0.
+- **Override-aware:** days suppressed by an active pause / skip / household vacation override (see US-2.3.5) behave like non-scheduled days — they are skipped in the walk-back, neither extending nor breaking the streak. So a holiday week off doesn't nuke a 30-day streak.
+- **Weekend-only routines** (e.g., `days_of_week=[5,6]`) follow the same scheduled-day rule, so the maximum natural run is 2 days at a time. To pair them with a weekday routine into a single "series," create one routine spanning all 7 days and use **per-step `days_of_week`** (US-2.3.6) to drop the school-only steps on Saturday/Sunday.
 
 **US-2.3.4: Routine Management**
 - Admin/parent profiles can create, edit, delete, and **duplicate** routines.
@@ -138,7 +144,37 @@ Each **step** has:
 - Deleting a routine prompts confirmation and cascades to steps and completion history.
 - **Routine templates:** a curated set of pre-built templates (Morning, After-School, Bedtime, Tidy-Up) is available from the "New routine" flow; selecting a template seeds name, time block, days, and steps which the admin can then customize.
 
-**Done means:** a routine with days_of_week=[0,1,2,3,4] (weekdays) does NOT appear on the dashboard on Saturday/Sunday. A 5-point step completed by a child immediately shows +5 in their point balance.
+**US-2.3.5: Parental Overrides — Pause / Skip / Vacation Mode**
+
+> *"As a parent, when we're on a long weekend or our kid is sick, I want to pause routines without losing the streaks the kids have built up."*
+
+Three override kinds, all admin-only writes, all surfaced as `RoutineOverride` rows in a single table:
+
+| Override | Scope | end_date | Use case |
+|----------|-------|----------|----------|
+| **Skip today** | Single routine | = start_date | Sick day, special outing |
+| **Pause** | Single routine | nullable; null = indefinite | Multi-day break (illness, schedule change) |
+| **Vacation Mode** | Household-wide (`routine_id = null`) | nullable | Family trip, long weekend, holidays |
+
+- A household-wide ("Vacation Mode") override only suppresses routines whose `pausable_on_vacation` flag is `true`. Mark medication/allergy/safety routines `pausable_on_vacation = false` so they keep running through vacations.
+- Suppressed routines are hidden from the Splash and Home widget and rendered with an amber "⏸ Paused until …" or "⏭ Skipped today" badge on the Routines page.
+- Streak protection: see US-2.3.3.
+- Admins create overrides from per-routine **Pause / Skip / Resume** buttons on each routine card or from the **Vacation Mode** section in Admin → Settings (date pickers + reason + active-override list with "End now" cancel).
+- API: `POST/GET/DELETE /api/routine-overrides`. Non-admin profiles get 403 on writes.
+
+**Done means:** a family on a 5-day vacation hits "Vacation Mode" with a date range; every routine except the daily allergy-meds routine (admin set `pausable_on_vacation=false`) disappears from Splash/Home/stepper. Streaks for the suppressed routines are preserved when the family returns. Allergy meds keeps running and earning points each day.
+
+**US-2.3.6: Per-Step Day-of-Week Scheduling**
+
+> *"My morning routine has steps that only apply on school days — packing the backpack on Sat/Sun is silly."*
+
+- Each `RoutineStep` carries an optional `days_of_week` array. NULL/empty means "runs every day the parent routine runs" (the legacy default).
+- The stepper hides non-applicable steps for the current day; the streak rule and the "fully complete" check use only the applicable-today step set, so a routine can be Done on Sunday with fewer steps than on Tuesday.
+- The routine editor exposes a per-step weekday chip selector (M T W T F S S) that defaults to "all days the routine runs."
+
+**Done means:** a 7-day "Morning" routine with `days_of_week=[0..6]` and a step "Pack backpack" with `days_of_week=[0,1,2,3,4]` shows brush-teeth + breakfast + pack-backpack Mon–Fri and only brush-teeth + breakfast Sat/Sun. Completing both Sat steps marks the routine Done for Saturday and extends the streak.
+
+**Done means (overall):** a routine with days_of_week=[0,1,2,3,4] (weekdays) does NOT appear on the dashboard on Saturday/Sunday. A 5-point step completed by a child immediately shows +5 in their point balance. Re-opening that routine shows the step pre-checked, with no second point award.
 
 ### 2.4 Points & Rewards Store
 
@@ -316,7 +352,7 @@ The Ambient splash renders, top-to-bottom:
 1. **Greeting + clock** — date, current time, household timezone.
 2. **Today's agenda** — events for today, color-dot per assigned profile, grouped Morning / Afternoon / Evening (same buckets as the dashboard).
 3. **Upcoming days** — agenda for day +1, +2, … up to `splash_agenda_max_days` (admin cap, 1–7, default **3**), but the renderer **stops early** if the next day's block would overflow the viewport. Each day gets a header ("Tomorrow", weekday name).
-4. **Today's routines** — active routines for today grouped by time block, showing name, time block, step count, 🔥 streak, and the assignee's name and avatar (or a "Household" indicator when `profile_id` is null). Read-only on the splash; completion is only possible after login.
+4. **Today's routines** — active routines for today grouped by time block, showing name, time block, 🔥 streak, and the assignee's name and avatar (or a "Household" indicator when `profile_id` is null). Filtered to the **current time block only**, with routines fully completed today and routines suppressed by a pause/skip/vacation override (US-2.3.5) hidden. Read-only on the splash; completion is only possible after login.
 5. *(optional)* Today's meals and current weather — independent toggles, see US-2.12.4.
 
 The splash always renders in a fixed **"kid-safe" palette** — high-contrast, warm, optimized for 3–6 ft viewing distance — independent of the household theme/accent settings. Theme, dark mode, and accent color apply only to post-login views.
@@ -497,9 +533,12 @@ Household
 | Method | Endpoint | Notes |
 |--------|----------|-------|
 | GET | `/api/dashboard` | Composite read-only endpoint (profiles, agenda, routines, meals, lists) |
-| POST | `/api/routines/:id/complete-step` | Body: `{step_id, profile_id}` — idempotent |
-| GET | `/api/routines/:id/streak` | Returns current and longest streak |
+| POST | `/api/routines/:id/steps/:step_id/complete` | Body params: `profile_id` — idempotent; awards points once per step per day |
+| POST | `/api/routines/:id/steps/:step_id/uncomplete` | Removes the step from today's completed set; does NOT refund points (anti-farming) |
+| GET | `/api/routines/:id/streak` | Returns current and longest streak (override-aware) |
 | GET | `/api/routines/active` | Routines active for today |
+| GET | `/api/routines/today/completions` | Snapshot per (routine, profile) of today's `completed_step_ids`, `applicable_step_ids`, and re-derived `is_fully_completed`. Powers the stepper seed and the "Done today" badge. Optional `profile_id` filter. |
+| POST/GET/DELETE | `/api/routine-overrides` | Pause / skip-today / household vacation overrides. Admin-only writes; any household member can list. See US-2.3.5. |
 | POST | `/api/rewards/redeem` | Body: `{reward_id, profile_id, household_id}` |
 | GET | `/api/rewards/leaderboard` | Points ranking for household |
 | GET | `/api/rewards/points` | Balance for a profile |
@@ -641,16 +680,29 @@ Every screen must handle these gracefully:
 - [x] Docker Compose deployment
 - [x] Touch-friendly AM/PM time picker
 
-### Phase 1.5 — Splash & Pre-Login Privacy (in progress)
-- [ ] Pre-login splash: Ambient agenda mode (today + upcoming days with viewport-aware spill)
-- [ ] Splash modes: Ambient / Photo / Alternating with admin-configurable cadence
-- [ ] Pre-login privacy policy: `splash_calendar_mode` (off / busy_only / hidden)
-- [ ] Per-section splash toggles (routines / meals / weather / messages)
-- [ ] Server-side enforcement via unauthenticated `GET /api/splash`
-- [ ] "Lock now" header action and `POST /api/auth/lock`
-- [ ] Admin "Preview splash" panel (Ambient / Photo / Alternating fast-forward)
-- [ ] Remove post-login PIN-gated reveal on Calendar / Meals / Dashboard
-- [ ] Alembic migration: `privacy_mode` → `splash_calendar_mode`
+### Phase 1.5 — Splash & Pre-Login Privacy ✅ shipped
+- [x] Pre-login splash: Ambient agenda mode (today + upcoming days with viewport-aware spill)
+- [x] Splash modes: Ambient / Photo / Alternating with admin-configurable cadence
+- [x] Pre-login privacy policy: `splash_calendar_mode` (off / busy_only / hidden)
+- [x] Per-section splash toggles (routines / meals / weather / messages)
+- [x] Server-side enforcement via unauthenticated `GET /api/splash`
+- [x] "Lock now" header action and `POST /api/auth/lock`
+- [x] Admin "Preview splash" panel (Ambient / Photo / Alternating fast-forward)
+- [x] Remove post-login PIN-gated reveal on Calendar / Meals / Dashboard
+- [x] Alembic migration: `privacy_mode` → `splash_calendar_mode`
+- [x] Hestia hearth-flame backdrop with translucent module cards positioned beneath the wordmark
+
+### Phase 1.6 — Routine Behavior Refinements ✅ shipped
+- [x] Per-step `days_of_week` so a single routine can drop weekday-only steps on weekends (US-2.3.6)
+- [x] Streak rule walks across *scheduled* days (per `days_of_week`), not calendar days
+- [x] Routine assignment scoping — a kid sees only their own + household routines on the Routines page; admins get a "Show all" toggle
+- [x] Splash + Home filter to current time block AND drop fully-completed routines for the day
+- [x] Stepper seeds checkbox state from `GET /api/routines/today/completions` so re-opens reflect server truth
+- [x] Drill into the stepper from the Home routines widget
+- [x] "Done today" green badge on the Routines page for completed routines
+- [x] Parental overrides: per-routine Pause / Skip-today and household-wide Vacation Mode (US-2.3.5)
+- [x] `pausable_on_vacation` opt-out per routine (medications, allergy meds keep running)
+- [x] Override-aware streak walk (paused/skipped days don't break streaks)
 
 ### Phase 2 — Multi-Service Sync & Polish
 - [ ] Two-way Google Calendar sync (write-back)
