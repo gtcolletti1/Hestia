@@ -30,6 +30,7 @@ export interface Routine {
   days_of_week: number[];
   start_time?: string;
   is_active: boolean;
+  pausable_on_vacation?: boolean;
   household_id: string;
   profile_id?: string;
   steps: RoutineStep[];

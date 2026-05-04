@@ -1,6 +1,12 @@
 from app.models.user import Household, Profile  # noqa: F401
 from app.models.calendar import SourceCalendar, Event  # noqa: F401
-from app.models.routine import Routine, RoutineStep, RoutineCompletion  # noqa: F401
+from app.models.routine import (  # noqa: F401
+    Routine,
+    RoutineStep,
+    RoutineCompletion,
+    RoutineOverride,
+    RoutineOverrideKind,
+)
 from app.models.list import TaskList, ListItem  # noqa: F401
 from app.models.meal import MealPlan  # noqa: F401
 from app.models.integration import OAuthCredential, SyncQueueItem  # noqa: F401
@@ -17,6 +23,8 @@ __all__ = [
     "Routine",
     "RoutineStep",
     "RoutineCompletion",
+    "RoutineOverride",
+    "RoutineOverrideKind",
     "TaskList",
     "ListItem",
     "MealPlan",

@@ -41,6 +41,16 @@ class Routine(Base):
     )
     start_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    pausable_on_vacation: Mapped[bool] = mapped_column(
+        default=True,
+        nullable=False,
+        server_default="true",
+        comment=(
+            "If True, household-wide vacation pauses also suspend this "
+            "routine. Set False for medication / safety routines that "
+            "should never auto-pause."
+        ),
+    )
     sort_order: Mapped[int] = mapped_column(default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         default=func.now(), server_default=func.now()
@@ -138,3 +148,64 @@ class RoutineCompletion(Base):
             f"<RoutineCompletion id={self.id} routine_id={self.routine_id} "
             f"date={self.date} completed={self.is_fully_completed}>"
         )
+
+
+class RoutineOverrideKind(str, enum.Enum):
+    pause = "pause"
+    skip = "skip"
+
+
+class RoutineOverride(Base):
+    """Pause / skip rule that suppresses a routine for a date range.
+
+    A row with ``routine_id IS NULL`` is a household-wide pause (vacation
+    mode) that suppresses every routine in the household whose
+    ``pausable_on_vacation`` flag is True.
+
+    For ``kind == 'skip'``, ``end_date`` equals ``start_date`` (a single
+    day off — typically "skip today" from the routines tab).
+    For ``kind == 'pause'``, ``end_date`` is either a future date or NULL
+    (indefinite, until cancelled).
+    """
+
+    __tablename__ = "routine_overrides"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    household_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("households.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    routine_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("routines.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    kind: Mapped[RoutineOverrideKind] = mapped_column(String(16), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_by_profile_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        default=func.now(), server_default=func.now()
+    )
+
+    routine: Mapped[Optional["Routine"]] = relationship(foreign_keys=[routine_id])
+
+    def covers(self, target: date) -> bool:
+        if target < self.start_date:
+            return False
+        if self.end_date is not None and target > self.end_date:
+            return False
+        return True
+
+    def __repr__(self) -> str:
+        scope = f"routine={self.routine_id}" if self.routine_id else "household-wide"
+        end = self.end_date.isoformat() if self.end_date else "indefinite"
+        return f"<RoutineOverride {self.kind} {scope} {self.start_date}..{end}>"

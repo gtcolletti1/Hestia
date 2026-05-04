@@ -179,6 +179,35 @@ export const routines = {
   getTemplates: () => client.get<RoutineTemplate[]>("/routines/templates"),
 };
 
+// --- Routine Overrides (Phase C: pause / skip / vacation) ---
+
+export interface RoutineOverride {
+  id: string;
+  household_id: string;
+  routine_id: string | null;
+  kind: "pause" | "skip";
+  start_date: string;
+  end_date: string | null;
+  reason: string | null;
+  created_by_profile_id: string | null;
+  created_at: string;
+}
+
+export const routineOverrides = {
+  list: (householdId: string, params?: { routine_id?: string; active_on?: string }) =>
+    client.get<RoutineOverride[]>("/routine-overrides", {
+      params: { household_id: householdId, ...params },
+    }),
+  create: (payload: {
+    routine_id?: string | null;
+    kind: "pause" | "skip";
+    start_date: string;
+    end_date?: string | null;
+    reason?: string | null;
+  }) => client.post<RoutineOverride>("/routine-overrides", payload),
+  remove: (id: string) => client.delete<void>(`/routine-overrides/${id}`),
+};
+
 // --- Lists ---
 
 export const lists = {

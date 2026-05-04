@@ -24,6 +24,7 @@ from app.services.routine_window import (
     applicable_step_ids,
     compute_current_streak,
     is_routine_complete_for,
+    load_active_overrides,
 )
 from app.data.routine_templates import ROUTINE_TEMPLATES
 
@@ -162,6 +163,7 @@ async def create_routine(
         days_of_week=payload.days_of_week,
         start_time=payload.start_time,
         is_active=payload.is_active,
+        pausable_on_vacation=payload.pausable_on_vacation,
     )
     db.add(routine)
     await db.flush()
@@ -537,7 +539,10 @@ async def get_streak(
         raise HTTPException(status_code=403, detail="Access denied")
 
     today = date.today()
-    current_streak = await compute_current_streak(db, routine, profile_id, today)
+    overrides = await load_active_overrides(db, routine.household_id, today)
+    current_streak = await compute_current_streak(
+        db, routine, profile_id, today, overrides=overrides
+    )
 
     # Total completions = days where the applicable-step set was satisfied.
     rows = (

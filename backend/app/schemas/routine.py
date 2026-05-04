@@ -1,5 +1,6 @@
 import uuid
 import datetime as dt
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -36,6 +37,7 @@ class RoutineBase(BaseModel):
     days_of_week: list[int]
     start_time: dt.time | None = None
     is_active: bool = True
+    pausable_on_vacation: bool = True
 
 
 class RoutineCreate(RoutineBase):
@@ -50,6 +52,7 @@ class RoutineUpdate(BaseModel):
     days_of_week: list[int] | None = None
     start_time: dt.time | None = None
     is_active: bool | None = None
+    pausable_on_vacation: bool | None = None
     sort_order: int | None = None
     profile_id: uuid.UUID | None = None
     steps: list[RoutineStepCreate] | None = None
@@ -118,3 +121,40 @@ class RoutineTemplateResponse(BaseModel):
     time_block: TimeBlock
     days_of_week: list[int]
     steps: list[RoutineTemplateStep]
+
+
+# ── Overrides (Phase C: pause / skip / vacation mode) ────────────────────────
+
+
+from typing import Literal as _Literal
+
+
+class RoutineOverrideCreate(BaseModel):
+    """Admin-only request to pause or skip a routine.
+
+    - ``routine_id`` NULL means a household-wide pause (vacation mode).
+    - For ``kind='skip'``, ``end_date`` MUST equal ``start_date`` (a single
+      day off). The API will normalize/validate this.
+    - For ``kind='pause'``, ``end_date`` may be omitted for an indefinite
+      pause (admin will cancel manually).
+    """
+
+    routine_id: uuid.UUID | None = None
+    kind: _Literal["pause", "skip"]
+    start_date: date
+    end_date: date | None = None
+    reason: str | None = None
+
+
+class RoutineOverrideResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    household_id: uuid.UUID
+    routine_id: uuid.UUID | None
+    kind: str
+    start_date: date
+    end_date: date | None
+    reason: str | None
+    created_by_profile_id: uuid.UUID | None
+    created_at: datetime

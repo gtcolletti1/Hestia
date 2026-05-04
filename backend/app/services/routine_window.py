@@ -16,7 +16,55 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.routine import Routine, RoutineCompletion, RoutineStep, TimeBlock
+from app.models.routine import (
+    Routine,
+    RoutineCompletion,
+    RoutineOverride,
+    RoutineOverrideKind,
+    RoutineStep,
+    TimeBlock,
+)
+
+
+async def load_active_overrides(
+    db: AsyncSession, household_id: uuid.UUID, today: date
+) -> list[RoutineOverride]:
+    """All overrides for the household that are active at any point on
+    ``today`` or later, capped to a ~1-year window. Used to filter the
+    splash/dashboard *and* to drive the streak walk-back so paused days
+    don't break a streak.
+    """
+    horizon = today - timedelta(days=366)
+    result = await db.execute(
+        select(RoutineOverride).where(
+            RoutineOverride.household_id == household_id,
+            RoutineOverride.start_date <= today + timedelta(days=30),
+            (RoutineOverride.end_date.is_(None))
+            | (RoutineOverride.end_date >= horizon),
+        )
+    )
+    return list(result.scalars().all())
+
+
+def routine_paused_on(
+    routine: Routine,
+    overrides: Iterable[RoutineOverride],
+    target: date,
+) -> RoutineOverride | None:
+    """Return the first override that suppresses ``routine`` on ``target``,
+    or None. Household-wide overrides only apply when the routine is
+    ``pausable_on_vacation``.
+    """
+    for ov in overrides:
+        if not ov.covers(target):
+            continue
+        if ov.routine_id is None:
+            if not routine.pausable_on_vacation:
+                continue
+            return ov
+        if ov.routine_id == routine.id:
+            return ov
+    return None
 
 
 def current_time_block(local_time: time) -> TimeBlock:
@@ -67,15 +115,24 @@ def is_routine_complete_for(
     return needed.issubset(set(completed_step_ids))
 
 
-def routine_runs_today(routine: Routine, weekday: int) -> bool:
+def routine_runs_today(
+    routine: Routine,
+    weekday: int,
+    *,
+    overrides: Iterable[RoutineOverride] | None = None,
+    target: date | None = None,
+) -> bool:
     """Should this routine be listed for ``weekday``?
 
-    True when the routine's day-of-week gate includes today AND either it
-    has no steps at all (legacy / placeholder routine) or at least one
-    step is applicable today.
+    True when the routine's day-of-week gate includes the weekday AND
+    either it has no steps at all (legacy / placeholder routine) or at
+    least one step is applicable today AND no active override covers it.
     """
     if weekday not in (routine.days_of_week or []):
         return False
+    if overrides is not None and target is not None:
+        if routine_paused_on(routine, overrides, target) is not None:
+            return False
     if not routine.steps:
         return True
     return bool(applicable_step_ids(routine, weekday))
@@ -158,24 +215,22 @@ async def compute_current_streak(
     profile_id: uuid.UUID,
     today: date,
     max_lookback_days: int = 366,
+    *,
+    overrides: Iterable[RoutineOverride] | None = None,
 ) -> int:
     """Walk backwards across the routine's *scheduled* days, counting
     consecutive days where every applicable step was completed.
 
-    A routine's scheduled days are days whose weekday is in
-    ``routine.days_of_week``. Non-scheduled days are skipped (they
-    neither extend nor break the streak), so a Sat/Sun-only routine can
-    streak indefinitely.
-
-    If today is scheduled but not yet complete, the walk starts from the
-    most recent prior scheduled day (matching the pre-existing UX where a
-    streak doesn't drop just because today's checklist isn't done yet).
+    Override-suppressed days (paused / skipped) behave exactly like
+    non-scheduled days: they are skipped in the walk-back, neither
+    extending nor breaking the streak. So a holiday week off doesn't
+    nuke a 30-day streak.
     """
     scheduled = list(routine.days_of_week or [])
     if not scheduled:
         return 0
+    overrides_list = list(overrides) if overrides is not None else []
 
-    # Pull all completion rows in window once.
     earliest = today - timedelta(days=max_lookback_days)
     result = await db.execute(
         select(RoutineCompletion.date, RoutineCompletion.completed_steps)
@@ -193,16 +248,19 @@ async def compute_current_streak(
     def is_complete(d: date) -> bool:
         return is_routine_complete_for(routine, d.weekday(), by_date.get(d, set()))
 
+    def is_paused(d: date) -> bool:
+        return routine_paused_on(routine, overrides_list, d) is not None
+
     streak = 0
     cursor = today
-    today_scheduled = today.weekday() in scheduled
+    today_scheduled = today.weekday() in scheduled and not is_paused(today)
     today_done = today_scheduled and is_complete(today)
 
     if today_scheduled and not today_done:
         cursor = today - timedelta(days=1)
 
     while cursor >= earliest:
-        if cursor.weekday() in scheduled:
+        if cursor.weekday() in scheduled and not is_paused(cursor):
             if is_complete(cursor):
                 streak += 1
                 cursor = cursor - timedelta(days=1)

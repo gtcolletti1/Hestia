@@ -29,6 +29,7 @@ from app.services.routine_window import (
     routine_runs_today,
     completed_routine_ids_today,
     compute_current_streak,
+    load_active_overrides,
     current_time_block,
 )
 
@@ -166,9 +167,10 @@ async def get_dashboard(
             Routine.time_block == active_block,
         )
     )
+    overrides = await load_active_overrides(db, household_id, today)
     todays_routines = [
         r for r in routines_result.scalars().all()
-        if routine_runs_today(r, current_weekday)
+        if routine_runs_today(r, current_weekday, overrides=overrides, target=today)
     ]
     completed_ids = await completed_routine_ids_today(db, todays_routines, today)
 
@@ -180,7 +182,7 @@ async def get_dashboard(
         streak = 0
         if routine.profile_id is not None:
             streak = await compute_current_streak(
-                db, routine, routine.profile_id, today
+                db, routine, routine.profile_id, today, overrides=overrides
             )
         # Show the count of steps actually applicable today, not the
         # routine's full step library — a Mon-Fri "Pack backpack" step

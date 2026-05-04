@@ -712,6 +712,9 @@ export default function SettingsPanel() {
       {/* Screensaver Photos */}
       <ScreensaverPhotosSection householdId={householdId} />
 
+      {/* Vacation Mode (Phase C parental override) */}
+      <VacationModeSection householdId={householdId} />
+
       {/* Calendar & Outlook Integrations */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -1135,6 +1138,138 @@ function ScreensaverPhotosSection({ householdId }: { householdId: string | null 
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+
+// ── Vacation Mode (Phase C: household-wide pause for opt-in routines) ────────
+
+import {
+  routineOverrides as overridesApiVM,
+  type RoutineOverride as RoutineOverrideVM,
+} from "@/api/endpoints";
+
+function VacationModeSection({ householdId }: { householdId: string | null }) {
+  const queryClient = useQueryClient();
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const [start, setStart] = useState(todayIso);
+  const [end, setEnd] = useState("");
+  const [reason, setReason] = useState("");
+
+  const { data: overrides = [] } = useQuery<RoutineOverrideVM[]>({
+    queryKey: ["routine-overrides", householdId, "household-wide"],
+    queryFn: async () =>
+      (await overridesApiVM.list(householdId!)).data.filter(
+        (o) => o.routine_id === null,
+      ),
+    enabled: !!householdId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      overridesApiVM.create({
+        routine_id: null,
+        kind: "pause",
+        start_date: start,
+        end_date: end || null,
+        reason: reason || null,
+      }),
+    onSuccess: () => {
+      setReason("");
+      setEnd("");
+      queryClient.invalidateQueries({ queryKey: ["routine-overrides"] });
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => overridesApiVM.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["routine-overrides"] });
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+    },
+  });
+
+  const active = overrides.filter(
+    (o) => o.start_date <= todayIso && (o.end_date === null || o.end_date >= todayIso),
+  );
+
+  return (
+    <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+        🏝️ Vacation Mode
+      </h3>
+      <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+        Pause every routine that's marked "pausable on vacation" for a date
+        range. Routines flagged as not-pausable (medications, allergy meds,
+        etc.) keep running.
+      </p>
+
+      {active.length > 0 && (
+        <div className="mb-4 space-y-2">
+          {active.map((o) => (
+            <div
+              key={o.id}
+              className="flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-3 py-2"
+            >
+              <div className="text-sm text-amber-900 dark:text-amber-200">
+                <strong>Active:</strong> {o.start_date}
+                {o.end_date ? ` → ${o.end_date}` : " (indefinite)"}
+                {o.reason && <span className="ml-2 italic">— {o.reason}</span>}
+              </div>
+              <button
+                onClick={() => cancelMutation.mutate(o.id)}
+                className="text-sm font-semibold text-amber-700 dark:text-amber-300 hover:underline"
+              >
+                End now
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <label className="text-sm text-gray-700 dark:text-gray-300">
+          Start
+          <input
+            type="date"
+            value={start}
+            min={todayIso}
+            onChange={(e) => setStart(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2"
+          />
+        </label>
+        <label className="text-sm text-gray-700 dark:text-gray-300">
+          End (blank = indefinite)
+          <input
+            type="date"
+            value={end}
+            min={start}
+            onChange={(e) => setEnd(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2"
+          />
+        </label>
+        <label className="text-sm text-gray-700 dark:text-gray-300">
+          Reason (optional)
+          <input
+            type="text"
+            value={reason}
+            placeholder="Beach week"
+            onChange={(e) => setReason(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2"
+          />
+        </label>
+      </div>
+      <div className="mt-4 flex justify-end">
+        <button
+          disabled={!householdId || createMutation.isPending}
+          onClick={() => createMutation.mutate()}
+          className="touch-target rounded-xl bg-amber-600 px-5 py-2 font-semibold text-white shadow transition hover:opacity-90 active:scale-95 disabled:opacity-50"
+        >
+          Start Vacation Mode
+        </button>
+      </div>
     </section>
   );
 }

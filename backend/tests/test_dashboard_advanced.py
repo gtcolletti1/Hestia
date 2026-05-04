@@ -287,8 +287,15 @@ async def test_dashboard_tz_excludes_yesterday_evening_event(
     # only works if local-now is past midnight UTC). Simpler: put event
     # 23:00-23:30 UTC of UTC's "today" — that's evening EDT yesterday or
     # afternoon Pacific yesterday. Use Pacific to dodge edge cases.
-    utc_today = datetime.now(timezone.utc).date()
-    # Event at 04:00-04:30 UTC = 21:00-21:30 PDT *yesterday* (UTC-7).
+    # This test relies on an event existing simultaneously in "today UTC"
+    # and "yesterday PDT". That window is empty between 00:00 and 07:00
+    # UTC (when UTC has rolled over but PDT hasn't). Skip rather than
+    # flake when the test is run in that window.
+    now_utc = datetime.now(timezone.utc)
+    if now_utc.hour < 7:
+        import pytest as _pytest
+        _pytest.skip("UTC < 07:00; today-UTC ∩ yesterday-PDT is empty")
+    utc_today = now_utc.date()
     event = Event(
         source_calendar_id=cal.id,
         title="Yesterday Evening (PDT)",

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { routines as routinesApi } from "@/api/endpoints";
+import { routines as routinesApi, routineOverrides as overridesApi, type RoutineOverride } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
 import type { Routine, RoutineStep, RoutineTemplate } from "@/types";
@@ -110,6 +110,55 @@ export default function RoutineList() {
   const duplicateMutation = useMutation({
     mutationFn: (routineId: string) => routinesApi.duplicate(routineId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["routines"] }),
+  });
+
+  // ── Phase C: per-routine pause / skip overrides (admin-only writes) ──
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const { data: overrides = [] } = useQuery<RoutineOverride[]>({
+    queryKey: ["routine-overrides", householdId, todayIso],
+    queryFn: async () =>
+      (await overridesApi.list(householdId!, { active_on: todayIso })).data,
+    enabled: !!householdId,
+  });
+  const overrideForRoutine = (routineId: string): RoutineOverride | undefined =>
+    overrides.find(
+      (o) =>
+        (o.routine_id === routineId ||
+          (o.routine_id === null /* household-wide */ === true)) &&
+        o.start_date <= todayIso &&
+        (o.end_date === null || o.end_date >= todayIso),
+    );
+  const skipTodayMutation = useMutation({
+    mutationFn: (routineId: string) =>
+      overridesApi.create({
+        routine_id: routineId,
+        kind: "skip",
+        start_date: todayIso,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["routine-overrides"] });
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+    },
+  });
+  const pauseMutation = useMutation({
+    mutationFn: ({ routineId, until }: { routineId: string; until: string | null }) =>
+      overridesApi.create({
+        routine_id: routineId,
+        kind: "pause",
+        start_date: todayIso,
+        end_date: until,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["routine-overrides"] });
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+    },
+  });
+  const cancelOverrideMutation = useMutation({
+    mutationFn: (id: string) => overridesApi.remove(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["routine-overrides"] });
+      queryClient.invalidateQueries({ queryKey: ["routines"] });
+    },
   });
 
   const activeBlock = currentTimeBlock();
@@ -289,8 +338,83 @@ export default function RoutineList() {
                             profileId={routine.profile_id}
                           />
                         )}
+                        {(() => {
+                          const ov = overrideForRoutine(routine.id);
+                          if (!ov) return null;
+                          const label =
+                            ov.kind === "skip"
+                              ? "⏭ Skipped today"
+                              : ov.end_date
+                                ? `⏸ Paused until ${ov.end_date}`
+                                : "⏸ Paused";
+                          return (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                              title={ov.reason ?? undefined}
+                            >
+                              {label}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        {isAdmin && (() => {
+                          const ov = overrideForRoutine(routine.id);
+                          if (ov && ov.routine_id === routine.id) {
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  cancelOverrideMutation.mutate(ov.id);
+                                }}
+                                className="touch-target rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-emerald-600 dark:hover:bg-gray-700 dark:hover:text-emerald-400"
+                                aria-label="Resume routine"
+                                title="Resume"
+                              >
+                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+                              </button>
+                            );
+                          }
+                          return (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  skipTodayMutation.mutate(routine.id);
+                                }}
+                                className="touch-target rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-amber-600 dark:hover:bg-gray-700 dark:hover:text-amber-400"
+                                aria-label="Skip today"
+                                title="Skip today"
+                              >
+                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm10-12v12h2V6h-2z" /></svg>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const days = prompt(
+                                    `Pause "${routine.name}" for how many days? (blank = indefinite)`,
+                                    "7",
+                                  );
+                                  if (days === null) return;
+                                  let until: string | null = null;
+                                  if (days.trim() !== "") {
+                                    const n = parseInt(days, 10);
+                                    if (Number.isNaN(n) || n < 1) return;
+                                    const d = new Date();
+                                    d.setDate(d.getDate() + n - 1);
+                                    until = d.toISOString().slice(0, 10);
+                                  }
+                                  pauseMutation.mutate({ routineId: routine.id, until });
+                                }}
+                                className="touch-target rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-amber-600 dark:hover:bg-gray-700 dark:hover:text-amber-400"
+                                aria-label="Pause routine"
+                                title="Pause"
+                              >
+                                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zm8 0h4v14h-4z" /></svg>
+                              </button>
+                            </>
+                          );
+                        })()}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();

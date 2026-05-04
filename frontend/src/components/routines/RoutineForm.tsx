@@ -167,6 +167,9 @@ export default function RoutineForm({
   );
   const [startTime, setStartTime] = useState(routine?.start_time ?? "");
   const [profileId, setProfileId] = useState(routine?.profile_id ?? "");
+  const [pausableOnVacation, setPausableOnVacation] = useState<boolean>(
+    routine?.pausable_on_vacation ?? true,
+  );
   const [steps, setSteps] = useState<StepInput[]>(() => {
     if (routine) {
       return routine.steps.map((s) => ({
@@ -296,6 +299,7 @@ export default function RoutineForm({
       days_of_week: daysOfWeek,
       start_time: startTime || undefined,
       profile_id: profileId || undefined,
+      pausable_on_vacation: pausableOnVacation,
       steps: filteredSteps,
     });
   };
@@ -553,6 +557,23 @@ export default function RoutineForm({
           + Add Step
         </button>
       </div>
+
+      {/* Vacation pauseability (Phase C) */}
+      <label className="flex items-start gap-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 p-3 text-sm">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 rounded"
+          checked={pausableOnVacation}
+          onChange={(e) => setPausableOnVacation(e.target.checked)}
+        />
+        <span className="text-gray-700 dark:text-gray-300">
+          Pause on vacation
+          <span className="block text-xs text-gray-500 dark:text-gray-400">
+            When admins start Vacation Mode, this routine will be suspended.
+            Uncheck for medications or anything that must keep running.
+          </span>
+        </span>
+      </label>
 
       {/* Actions */}
       <div className="flex gap-3 pt-2">
