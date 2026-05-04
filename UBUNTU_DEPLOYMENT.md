@@ -58,6 +58,13 @@ sudo reboot
 Use Docker's official apt repository — the `docker.io` package in Ubuntu's
 default repos is older and can lag behind on Compose v2.
 
+> **Heads up:** Ubuntu Desktop's "minimal install" option (and some cloud
+> images) ships without `curl`. If Step 1 was skipped or partially applied,
+> run this first or you'll get `Command 'curl' not found`:
+> ```bash
+> sudo apt update && sudo apt -y install curl ca-certificates gnupg git
+> ```
+
 ```bash
 # Add Docker's official GPG key
 sudo install -m 0755 -d /etc/apt/keyrings
