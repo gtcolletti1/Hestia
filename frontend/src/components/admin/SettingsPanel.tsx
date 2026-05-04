@@ -754,6 +754,9 @@ export default function SettingsPanel() {
       {/* School-day calendar (snow days, in-service days, etc.) */}
       <SchoolClosuresSection householdId={householdId} />
 
+      {/* JSON backup / restore */}
+      <BackupRestoreSection />
+
       {/* Calendar & Outlook Integrations */}
       <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
@@ -1592,6 +1595,138 @@ function HolidayCalendarSection({ householdId }: { householdId: string | null })
           {saveMutation.isPending ? "Saving…" : "Save"}
         </button>
       </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Backup & Restore — JSON export/import of every household-scoped table.
+// REPLACE semantics: importing wipes existing routines, lists, profiles,
+// closures, etc. before reinserting. OAuth credentials & sync queue items
+// are deliberately excluded for security/portability.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BackupRestoreSection() {
+  const queryClient = useQueryClient();
+  const [status, setStatus] = useState<
+    | { kind: "idle" }
+    | { kind: "exporting" }
+    | { kind: "importing" }
+    | { kind: "success"; message: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  const handleExport = async () => {
+    setStatus({ kind: "exporting" });
+    try {
+      const { data } = await admin.exportBackup();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = `hestia-backup-${stamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus({ kind: "success", message: "Backup downloaded." });
+    } catch (err) {
+      setStatus({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Export failed",
+      });
+    }
+  };
+
+  const handleFileChosen = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset so the same file can be re-picked
+    if (!file) return;
+
+    if (
+      !window.confirm(
+        `Restore from "${file.name}"?\n\nThis WIPES all current profiles, routines, lists, meals, photos, rewards, points, school closures, and calendars before re-inserting from the backup. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    setStatus({ kind: "importing" });
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const { data } = await admin.importBackup(payload);
+      const total = Object.values(data.restored ?? {}).reduce(
+        (a, b) => a + (b as number),
+        0,
+      );
+      // Blow away every cached query — practically everything is now stale.
+      queryClient.invalidateQueries();
+      setStatus({
+        kind: "success",
+        message: `Restored ${total} rows across ${Object.keys(data.restored ?? {}).length} tables.`,
+      });
+    } catch (err) {
+      const detail =
+        // axios error shape
+        (err as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail ??
+        (err instanceof Error ? err.message : "Restore failed");
+      setStatus({ kind: "error", message: detail });
+    }
+  };
+
+  const busy = status.kind === "exporting" || status.kind === "importing";
+
+  return (
+    <section className="rounded-2xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-6">
+      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+        💾 Backup & Restore
+      </h3>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        Export a JSON snapshot of everything in this household, or restore from
+        one. Sync tokens and saved OAuth credentials are excluded.
+      </p>
+
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={busy}
+          className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {status.kind === "exporting" ? "Exporting…" : "⬇ Download backup (.json)"}
+        </button>
+
+        <label
+          className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600 ${
+            busy ? "pointer-events-none opacity-50" : ""
+          }`}
+        >
+          {status.kind === "importing" ? "Restoring…" : "⬆ Restore from backup…"}
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={handleFileChosen}
+            disabled={busy}
+          />
+        </label>
+      </div>
+
+      {status.kind === "success" && (
+        <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
+          ✓ {status.message}
+        </p>
+      )}
+      {status.kind === "error" && (
+        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
+          ✗ {status.message}
+        </p>
+      )}
     </section>
   );
 }

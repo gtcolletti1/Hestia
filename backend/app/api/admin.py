@@ -169,6 +169,45 @@ async def toggle_module(
     return _load_settings(household)
 
 
+# ── Backup / restore (JSON export/import) ────────────────────────────────────
+
+
+@router.get("/admin/export")
+async def export_backup(
+    db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(require_admin),
+) -> dict:
+    """Download a full JSON backup of every household-scoped row.
+
+    Excludes OAuth credentials and sync queue items (env-specific / secrets).
+    Admin-only.
+    """
+    from app.services.backup import export_household
+
+    return await export_household(db, current_profile.household_id)
+
+
+@router.post("/admin/import")
+async def import_backup(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(require_admin),
+) -> dict:
+    """Restore a JSON backup. **REPLACE semantics**: existing household-scoped
+    data is wiped before the backup is reinserted. Admin-only.
+
+    Returns per-table insert counts for confirmation.
+    """
+    from app.services.backup import import_household
+
+    try:
+        counts = await import_household(db, current_profile.household_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    await db.commit()
+    return {"restored": counts}
+
+
 # ── Seed endpoint ────────────────────────────────────────────────────────────
 
 

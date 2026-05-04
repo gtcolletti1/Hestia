@@ -345,6 +345,11 @@ export const admin = {
       countries: string[];
       subdivisions: Record<string, string[]>;
     }>("/admin/holiday-options"),
+
+  exportBackup: () => client.get<Record<string, unknown>>("/admin/export"),
+
+  importBackup: (payload: Record<string, unknown>) =>
+    client.post<{ restored: Record<string, number> }>("/admin/import", payload),
 };
 
 // --- Auth ---
