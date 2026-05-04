@@ -4,7 +4,32 @@ End-to-end walkthrough for deploying Hestia (Family Hub Display) on a **fresh
 Ubuntu 22.04 / 24.04 LTS Server** install. Works on Intel NUC, generic mini PC,
 a VM, or a Raspberry Pi 4/5 running Ubuntu Server (arm64).
 
-What you'll end up with:
+---
+
+## 🚀 Easy mode: one-shot installer
+
+If you don't want to read this whole guide and just want Hestia running, copy
+and paste this **single command** on the Ubuntu device:
+
+```bash
+sudo apt update && sudo apt install -y curl && \
+  curl -fsSL https://raw.githubusercontent.com/gtcolletti1/Hestia/main/scripts/install-ubuntu.sh | bash
+```
+
+It installs Docker, clones the repo to `/opt/hestia`, generates secure random
+secrets, builds everything, runs database migrations, and prints the URL to
+open. Takes 5–15 minutes. Safe to re-run if anything fails partway. After it
+finishes you may need to log out and back in once so your user can run
+`docker` without `sudo`.
+
+The rest of this document is the **manual step-by-step** version of the same
+thing — read it if you want to understand each step or troubleshoot a
+problem.
+
+---
+
+## What you'll end up with
+
 - Hestia running under Docker Compose (Postgres, Redis, FastAPI backend,
   Celery worker + beat, React SPA built and served by Nginx).
 - Reachable on your LAN at `http://<host-ip>/`.
