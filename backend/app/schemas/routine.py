@@ -17,6 +17,7 @@ class RoutineStepBase(BaseModel):
     points_value: int = 0
     days_of_week: list[int] | None = None
     school_day_only: bool = False
+    assigned_profile_id: uuid.UUID | None = None
 
 
 class RoutineStepCreate(RoutineStepBase):

@@ -44,6 +44,7 @@ export interface RoutineStep {
   points_value: number;
   days_of_week?: number[] | null;
   school_day_only?: boolean;
+  assigned_profile_id?: string | null;
 }
 
 export interface RoutineCompletion {

@@ -189,6 +189,19 @@ Three override kinds, all admin-only writes, all surfaced as `RoutineOverride` r
 
 **Done means:** with `holiday_country=US` selected and a school routine that has "Brush teeth" (everyday) + "Pack backpack" (school-day only): on a regular Wednesday both steps appear; on Thanksgiving the routine still appears with just "Brush teeth"; on a snow day added via Settings the banner appears and "Pack backpack" is hidden; the kid's streak is unchanged either way.
 
+**US-2.3.8: Per-Step Chore Assignment**
+
+> *"The 'After-Dinner Tidy' household routine has three steps: Alex clears the table, Jamie loads the dishwasher, and either kid wipes the counters."*
+
+- Each `RoutineStep` carries an optional `assigned_profile_id` (default `NULL` = inherits the routine's assignment).
+- For routines already scoped to a single profile, the field is unused (the picker is hidden in the editor).
+- For household routines, each step can be assigned to a specific profile or left as "Everyone" (anyone may complete it).
+- A profile only sees the steps assigned to them or unassigned; attempting to complete someone else's step returns `403`.
+- A household routine is "done for the day" when every applicable step has been completed by the right person: assigned steps require their assignee's completion record; unassigned steps count for any profile.
+- Validation rejects an assignee from another household (400), or an assignee that doesn't match the routine's `profile_id` when one is set (400).
+
+**Done means:** A household "After-Dinner Tidy" routine with steps split between Alex and Jamie disappears from Splash/Home only after both kids have completed their respective steps; either kid can complete an unassigned step like "Wipe counters"; Alex tapping Jamie's step from the stepper is rejected with a clear error.
+
 ### 2.4 Points & Rewards Store
 
 > *"As a child, I earn points by completing chores and spend them on rewards my parents set up."*
@@ -487,7 +500,7 @@ Household
 │   └── Event (title, start_time, end_time, location, recurrence_rule, all_day)
 │       └── Reminder (minutes_before, fire_at, is_fired)
 ├── Routine (name, time_block, days_of_week[], start_time, is_active, pausable_on_vacation)
-│   ├── RoutineStep (label, icon, points_value, sort_order, days_of_week[], school_day_only)
+│   ├── RoutineStep (label, icon, points_value, sort_order, days_of_week[], school_day_only, assigned_profile_id)
 │   ├── RoutineCompletion (profile_id, date, completed_steps[], is_fully_completed)
 │   └── RoutineOverride (kind, start_date, end_date, reason)   # routine_id NULL = household-wide
 ├── SchoolClosure (date, reason)
@@ -744,7 +757,7 @@ Every screen must handle these gracefully:
 - [ ] Drag-and-drop reordering for list items and routine steps
 - [ ] Photo integration with Google Photos album
 - [ ] Export/import household data (JSON backup)
-- [ ] Chore assignment per profile (not just household-wide)
+- [x] Chore assignment per profile (per-step `assigned_profile_id`, US-2.3.8)
 - [ ] Notification bell on dashboard with badge count
 
 ### Phase 3 — Automation & Intelligence

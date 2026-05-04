@@ -104,7 +104,11 @@ def current_time_block(local_time: time) -> TimeBlock:
 
 
 def step_applies_on(
-    step: RoutineStep, weekday: int, *, is_school_day: bool = True
+    step: RoutineStep,
+    weekday: int,
+    *,
+    is_school_day: bool = True,
+    viewer_profile_id: "uuid.UUID | None" = None,
 ) -> bool:
     """Whether ``step`` runs on ``weekday`` (0=Mon..6=Sun).
 
@@ -114,8 +118,18 @@ def step_applies_on(
     If ``school_day_only`` is True on the step, the caller must pass
     ``is_school_day=False`` for non-school days (weekends, US federal
     holidays, admin-marked closures) to suppress the step.
+
+    If the step has ``assigned_profile_id`` set AND ``viewer_profile_id`` is
+    supplied, the step is hidden from anyone other than the assignee. When
+    no viewer is given, the step still "applies" — it counts toward the
+    household-aggregate "is this routine complete" tally so callers like
+    ``completed_routine_ids_today`` can short-circuit cheaply and then do
+    per-assignee verification themselves.
     """
     if getattr(step, "school_day_only", False) and not is_school_day:
+        return False
+    assignee = getattr(step, "assigned_profile_id", None)
+    if assignee is not None and viewer_profile_id is not None and assignee != viewer_profile_id:
         return False
     dow = step.days_of_week
     if not dow:
@@ -124,13 +138,24 @@ def step_applies_on(
 
 
 def applicable_step_ids(
-    routine: Routine, weekday: int, *, is_school_day: bool = True
+    routine: Routine,
+    weekday: int,
+    *,
+    is_school_day: bool = True,
+    viewer_profile_id: "uuid.UUID | None" = None,
 ) -> set[str]:
-    """IDs (as str) of steps in ``routine`` that apply on ``weekday``."""
+    """IDs (as str) of steps in ``routine`` that apply on ``weekday``.
+
+    Pass ``viewer_profile_id`` to filter out steps assigned to *other*
+    profiles (the per-stepper / per-completion view). Omit it for the
+    household-wide view.
+    """
     return {
         str(s.id)
         for s in routine.steps
-        if step_applies_on(s, weekday, is_school_day=is_school_day)
+        if step_applies_on(
+            s, weekday, is_school_day=is_school_day, viewer_profile_id=viewer_profile_id
+        )
     }
 
 
@@ -140,14 +165,20 @@ def is_routine_complete_for(
     completed_step_ids: Iterable[str],
     *,
     is_school_day: bool = True,
+    viewer_profile_id: "uuid.UUID | None" = None,
 ) -> bool:
     """True iff every step applicable on ``weekday`` is in ``completed_step_ids``.
 
     If the routine has no applicable steps for the day (e.g. all steps are
     weekday-only and it's Sunday), this returns False — the routine should
     not have been listed for that day in the first place.
+
+    Pass ``viewer_profile_id`` to evaluate per-profile completion (steps
+    assigned to other profiles are excluded from "applicable").
     """
-    needed = applicable_step_ids(routine, weekday, is_school_day=is_school_day)
+    needed = applicable_step_ids(
+        routine, weekday, is_school_day=is_school_day, viewer_profile_id=viewer_profile_id
+    )
     if not needed:
         return False
     return needed.issubset(set(completed_step_ids))
@@ -220,7 +251,6 @@ async def completed_routine_ids_today(
 
     completed: set[uuid.UUID] = set()
     for r in routines:
-        needed = applicable_step_ids(r, weekday, is_school_day=is_school_day)
         if not r.steps:
             # Legacy step-less routine: rely on is_fully_completed flag.
             if r.profile_id is None:
@@ -232,16 +262,34 @@ async def completed_routine_ids_today(
             if done:
                 completed.add(r.id)
             continue
+        # Build the household-applicable step set ignoring viewer (so
+        # assigned-to-X steps are still part of the "needed" tally).
+        needed = applicable_step_ids(r, weekday, is_school_day=is_school_day)
         if not needed:
             continue
         if r.profile_id is None:
-            # Unassigned: any single profile that completed the applicable
-            # set counts as done for the household view.
-            done = any(
-                steps >= needed
-                for (rid, _pid), steps in by_key.items()
-                if rid == r.id
-            )
+            # Household routine. Per-step assignment matters: a step
+            # assigned to Alex MUST appear in Alex's completion; an
+            # unassigned step counts if any household member did it.
+            steps_by_id = {str(s.id): s for s in r.steps}
+            done = True
+            for step_id in needed:
+                step = steps_by_id.get(step_id)
+                assignee = getattr(step, "assigned_profile_id", None) if step else None
+                if assignee is not None:
+                    # Only the assignee's completion counts.
+                    if step_id not in by_key.get((r.id, assignee), set()):
+                        done = False
+                        break
+                else:
+                    # Anyone in the household can clear it.
+                    if not any(
+                        step_id in steps
+                        for (rid, _pid), steps in by_key.items()
+                        if rid == r.id
+                    ):
+                        done = False
+                        break
         else:
             steps = by_key.get((r.id, r.profile_id), set())
             done = steps >= needed
@@ -300,7 +348,10 @@ async def compute_current_streak(
     def _has_applicable(d: date) -> bool:
         return bool(
             applicable_step_ids(
-                routine, d.weekday(), is_school_day=_school_day(d)
+                routine,
+                d.weekday(),
+                is_school_day=_school_day(d),
+                viewer_profile_id=profile_id,
             )
         )
 
@@ -310,6 +361,7 @@ async def compute_current_streak(
             d.weekday(),
             by_date.get(d, set()),
             is_school_day=_school_day(d),
+            viewer_profile_id=profile_id,
         )
 
     def is_paused(d: date) -> bool:

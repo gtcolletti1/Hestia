@@ -107,6 +107,17 @@ class RoutineStep(Base):
             "the step from the routine for that day."
         ),
     )
+    assigned_profile_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        comment=(
+            "Optional per-step assignee. NULL = the step applies to whoever "
+            "the parent routine is for (every household member if the routine "
+            "is unassigned, or the routine's profile if it's assigned). When "
+            "set, only that profile sees and can complete this step."
+        ),
+    )
     sort_order: Mapped[int] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         default=func.now(), server_default=func.now()

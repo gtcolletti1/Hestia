@@ -40,6 +40,60 @@ TIME_BLOCK_RANGES: dict[TimeBlock, tuple[time, time]] = {
 }
 
 
+async def _validate_assignee_id(
+    db: AsyncSession,
+    assignee_id: uuid.UUID,
+    household_id: uuid.UUID,
+    routine_profile_id: uuid.UUID | None,
+) -> None:
+    """Ensure a step's assigned_profile_id refers to a profile in the same
+    household; if the routine itself is profile-scoped, the assignee must
+    match (otherwise the assignee would never see the step)."""
+    if routine_profile_id is not None and assignee_id != routine_profile_id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Step assignee must match the routine's assigned profile "
+                "(or be left blank to inherit it)."
+            ),
+        )
+    profile = (
+        await db.execute(select(Profile).where(Profile.id == assignee_id))
+    ).scalar_one_or_none()
+    if profile is None or profile.household_id != household_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Step assignee profile not found in this household.",
+        )
+
+
+async def _validate_step_assignees(
+    db: AsyncSession,
+    steps,
+    household_id: uuid.UUID,
+    routine_profile_id: uuid.UUID | None,
+) -> None:
+    for s in steps:
+        if s.assigned_profile_id is not None:
+            await _validate_assignee_id(
+                db, s.assigned_profile_id, household_id, routine_profile_id
+            )
+
+
+async def _validate_step_assignees_dict(
+    db: AsyncSession,
+    steps_data: list[dict],
+    household_id: uuid.UUID,
+    routine_profile_id: uuid.UUID | None,
+) -> None:
+    for s in steps_data:
+        aid = s.get("assigned_profile_id")
+        if aid is not None:
+            await _validate_assignee_id(
+                db, uuid.UUID(str(aid)), household_id, routine_profile_id
+            )
+
+
 # ── List routines ────────────────────────────────────────────────────────────
 
 
@@ -180,7 +234,9 @@ async def list_today_completions(
         r = by_routine.get(c.routine_id)
         if r is None:
             continue
-        applicable = applicable_step_ids(r, weekday, is_school_day=today_is_school)
+        applicable = applicable_step_ids(
+            r, weekday, is_school_day=today_is_school, viewer_profile_id=c.profile_id
+        )
         completed = list(c.completed_steps or [])
         # Recompute fully-completed from applicable set so the flag reflects
         # *today's* schedule rather than whatever was stored at write time.
@@ -230,6 +286,9 @@ async def create_routine(
 ) -> Routine:
     if current_profile.household_id != payload.household_id:
         raise HTTPException(status_code=403, detail="Access denied")
+    await _validate_step_assignees(
+        db, payload.steps, payload.household_id, payload.profile_id
+    )
     routine = Routine(
         household_id=payload.household_id,
         profile_id=payload.profile_id,
@@ -251,6 +310,8 @@ async def create_routine(
             sort_order=step_data.sort_order,
             points_value=step_data.points_value,
             days_of_week=step_data.days_of_week,
+            school_day_only=step_data.school_day_only,
+            assigned_profile_id=step_data.assigned_profile_id,
         )
         db.add(step)
 
@@ -296,6 +357,10 @@ async def update_routine(
 
     # Replace steps if provided
     if steps_data is not None:
+        # Validate before mutating anything (raises HTTP 400 on bad assignee).
+        await _validate_step_assignees_dict(
+            db, steps_data, routine.household_id, routine.profile_id
+        )
         for existing_step in list(routine.steps):
             await db.delete(existing_step)
         await db.flush()
@@ -308,6 +373,8 @@ async def update_routine(
                 sort_order=step_data["sort_order"],
                 points_value=step_data.get("points_value", 0),
                 days_of_week=step_data.get("days_of_week"),
+                school_day_only=step_data.get("school_day_only", False),
+                assigned_profile_id=step_data.get("assigned_profile_id"),
             )
             db.add(step)
 
@@ -385,6 +452,8 @@ async def duplicate_routine(
             sort_order=step.sort_order,
             points_value=step.points_value,
             days_of_week=step.days_of_week,
+            school_day_only=step.school_day_only,
+            assigned_profile_id=step.assigned_profile_id,
         ))
 
     await db.flush()
@@ -426,9 +495,16 @@ async def complete_step(
     if routine.household_id != current_profile.household_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    step_ids = {str(s.id) for s in routine.steps}
+    step_ids = {str(s.id): s for s in routine.steps}
     if str(step_id) not in step_ids:
         raise HTTPException(status_code=404, detail="Step not found in this routine")
+    step_obj = step_ids[str(step_id)]
+    # Per-step assignment: only the assignee may complete an assigned step.
+    if step_obj.assigned_profile_id is not None and step_obj.assigned_profile_id != profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="This step is assigned to a different profile.",
+        )
 
     today = date.today()
 
@@ -483,6 +559,7 @@ async def complete_step(
         today.weekday(),
         completion.completed_steps,
         is_school_day=today_is_school,
+        viewer_profile_id=profile_id,
     ):
         completion.is_fully_completed = True
         completion.completed_at = datetime.utcnow()
@@ -594,6 +671,7 @@ async def uncomplete_step(
             today.weekday(),
             completion.completed_steps,
             is_school_day=school_ctx.is_school_day(today),
+            viewer_profile_id=profile_id,
         )
         if not completion.is_fully_completed:
             completion.completed_at = None
@@ -655,6 +733,7 @@ async def get_streak(
             d.weekday(),
             steps or [],
             is_school_day=school_ctx.is_school_day(d),
+            viewer_profile_id=profile_id,
         ):
             completed_dates.append(d)
     completed_dates.sort()

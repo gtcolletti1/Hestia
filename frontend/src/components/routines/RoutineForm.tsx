@@ -138,6 +138,9 @@ interface StepInput {
   // True = step is hidden on weekends, federal holidays, and admin-marked
   // school closures (e.g. "pack backpack" doesn't apply on snow days).
   school_day_only: boolean;
+  // null = inherit from the routine's assignee (everyone if household).
+  // Otherwise: only the named profile can complete this step.
+  assigned_profile_id: string | null;
 }
 
 type TimeBlock = "morning" | "afternoon" | "evening" | "bedtime";
@@ -198,6 +201,7 @@ export default function RoutineForm({
         points_value: s.points_value ?? 0,
         days_of_week: s.days_of_week ?? null,
         school_day_only: s.school_day_only ?? false,
+        assigned_profile_id: s.assigned_profile_id ?? null,
       }));
     }
     if (template) {
@@ -208,6 +212,7 @@ export default function RoutineForm({
         points_value: s.points_value ?? 0,
         days_of_week: null,
         school_day_only: false,
+        assigned_profile_id: null,
       }));
     }
     return [
@@ -218,6 +223,7 @@ export default function RoutineForm({
         points_value: 0,
         days_of_week: null,
         school_day_only: false,
+        assigned_profile_id: null,
       },
     ];
   });
@@ -273,6 +279,7 @@ export default function RoutineForm({
         points_value: 0,
         days_of_week: null,
         school_day_only: false,
+        assigned_profile_id: null,
       },
     ]);
 
@@ -343,6 +350,7 @@ export default function RoutineForm({
         // than the routine; null means "every routine day".
         days_of_week: s.days_of_week,
         school_day_only: s.school_day_only,
+        assigned_profile_id: s.assigned_profile_id,
       }));
 
     saveMutation.mutate({
@@ -655,6 +663,40 @@ export default function RoutineForm({
                             </span>
                           </span>
                         </label>
+
+                        {/* Per-step assignee. If the parent routine is
+                            already assigned to a single profile, this is
+                            redundant; only show the picker for household
+                            routines. "Everyone" = inherit (NULL). */}
+                        {!profileId && profiles.length > 0 && (
+                          <label className="mt-2 flex items-center gap-2 pl-7 text-xs text-gray-500 dark:text-gray-400">
+                            <span>Assigned to:</span>
+                            <select
+                              value={step.assigned_profile_id ?? ""}
+                              onChange={(e) =>
+                                setSteps((prev) =>
+                                  prev.map((s) =>
+                                    s.key === step.key
+                                      ? {
+                                          ...s,
+                                          assigned_profile_id:
+                                            e.target.value || null,
+                                        }
+                                      : s,
+                                  ),
+                                )
+                              }
+                              className="rounded border border-gray-300 bg-white px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-800"
+                            >
+                              <option value="">Everyone</option>
+                              {profiles.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
                       </div>
                     )}
                   </SortableItem>
