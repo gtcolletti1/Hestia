@@ -112,6 +112,57 @@ async def test_recurrence_override_dedupes_master_occurrence(
     assert occs[0].start_time == override_start
 
 
+async def test_recurrence_with_utc_until_and_local_tzid(
+    db_session: AsyncSession, sample_household
+):
+    """Regression: master with TZID + RRULE UNTIL=...Z must expand without
+    raising (dateutil rejects naive dtstart paired with aware UNTIL)."""
+    cal = await _make_calendar(db_session, sample_household)
+
+    # 11:30 EDT on May 3, 2026 (a Sunday) == 15:30 UTC
+    master_start = datetime(2026, 5, 3, 15, 30, tzinfo=timezone.utc)
+    master_end = master_start + timedelta(hours=1)
+    db_session.add(
+        Event(
+            source_calendar_id=cal.id,
+            external_id="biweekly-uid",
+            master_external_id="biweekly-uid",
+            title="Bear Den Meeting",
+            location="Church",
+            start_time=master_start,
+            end_time=master_end,
+            start_tzid="America/New_York",
+            recurrence_rule="FREQ=WEEKLY;UNTIL=20260601T035959Z;INTERVAL=2;BYDAY=SU",
+        )
+    )
+
+    # Override the May 3 occurrence with a different location.
+    db_session.add(
+        Event(
+            source_calendar_id=cal.id,
+            external_id="biweekly-uid#2026-05-03T15:30:00+00:00",
+            master_external_id="biweekly-uid",
+            recurrence_id=master_start,
+            title="Bear Den Meeting",
+            location="Police Department",
+            start_time=master_start,
+            end_time=master_end,
+        )
+    )
+    await db_session.commit()
+
+    day_start = datetime(2026, 5, 3, 0, 0, tzinfo=timezone.utc)
+    day_end = day_start + timedelta(days=1)
+    occs = await expand_events_in_range(
+        db_session, sample_household.id, day_start, day_end
+    )
+
+    assert len(occs) == 1, [
+        (o.event.title, o.event.location, o.start_time) for o in occs
+    ]
+    assert occs[0].event.location == "Police Department"
+
+
 async def test_exdate_skips_master_occurrence(
     db_session: AsyncSession, sample_household
 ):

@@ -158,9 +158,11 @@ async def expand_events_in_range(
             )
             master_tz = timezone.utc
 
-        local_dtstart = _ensure_utc(ev.start_time).astimezone(master_tz).replace(tzinfo=None)
-        local_range_start = range_start.astimezone(master_tz).replace(tzinfo=None)
-        local_range_end = range_end.astimezone(master_tz).replace(tzinfo=None)
+        # Keep dtstart + range bounds timezone-aware so rrulestr accepts a
+        # UTC `UNTIL=...Z` clause (dateutil requires both aware or both naive).
+        local_dtstart = _ensure_utc(ev.start_time).astimezone(master_tz)
+        local_range_start = range_start.astimezone(master_tz)
+        local_range_end = range_end.astimezone(master_tz)
 
         skip_utc: set[datetime] = set()
         if ev.exdates:
@@ -182,9 +184,14 @@ async def expand_events_in_range(
             rule = rrulestr(ev.recurrence_rule, dtstart=local_dtstart)
             local_occs = rule.between(local_range_start, local_range_end, inc=True)
         except (ValueError, TypeError):
+            logger.warning(
+                "Failed to parse RRULE %r on event %s; falling back to single occurrence",
+                ev.recurrence_rule,
+                ev.id,
+            )
             ev_start = _ensure_utc(ev.start_time)
             ev_end = _ensure_utc(ev.end_time)
-            if ev_start < range_end and ev_end >= range_start:
+            if ev_start < range_end and ev_end >= range_start and ev_start not in skip_utc:
                 output.append(
                     ExpandedEvent(
                         event=ev,
@@ -197,7 +204,7 @@ async def expand_events_in_range(
             continue
 
         for local_occ in local_occs:
-            occ_start = local_occ.replace(tzinfo=master_tz).astimezone(timezone.utc)
+            occ_start = local_occ.astimezone(timezone.utc)
             if occ_start in skip_utc:
                 continue
             occ_end = occ_start + duration
