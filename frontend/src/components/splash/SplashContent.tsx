@@ -336,6 +336,11 @@ function RoutinesBlock({ routines }: { routines: SplashRoutine[] }) {
     <ul className="space-y-2 overflow-hidden">
       {routines.slice(0, 6).map((r) => {
         const chip = TIME_BLOCK_COLOR[r.time_block] ?? KID_SAFE_PALETTE.anytime;
+        // Single chip carrying assignee + streak so the pill stays compact
+        // and the streak is visually tied to whose streak it is.
+        const assigneeName = r.assignee?.name ?? "Household";
+        const assigneeColor = r.assignee?.color ?? "#6b7280"; // gray-500
+        const showStreak = r.streak_days > 0 && !!r.assignee;
         return (
           <li
             key={r.id}
@@ -348,27 +353,30 @@ function RoutinesBlock({ routines }: { routines: SplashRoutine[] }) {
               {r.time_block}
             </span>
             <span className="min-w-0 flex-1 truncate text-base font-medium">{r.name}</span>
-            {r.assignee && (
-              <span
-                className="h-6 w-6 shrink-0 rounded-full text-xs font-bold flex items-center justify-center text-white"
-                style={{ backgroundColor: r.assignee.color }}
-                title={r.assignee.name}
-                aria-label={r.assignee.name}
-              >
-                {r.assignee.name.charAt(0)}
-              </span>
-            )}
+            <span
+              className="shrink-0 inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+              style={{ backgroundColor: assigneeColor }}
+              title={
+                showStreak
+                  ? `${assigneeName} · ${r.streak_days}-day streak`
+                  : assigneeName
+              }
+              aria-label={
+                showStreak
+                  ? `${assigneeName}, ${r.streak_days} day streak`
+                  : assigneeName
+              }
+            >
+              <span className="max-w-[8ch] truncate">{assigneeName}</span>
+              {showStreak && (
+                <span className="tabular-nums" aria-hidden>
+                  · 🔥 {r.streak_days}
+                </span>
+              )}
+            </span>
             <span className="shrink-0 text-xs text-[color:var(--splash-text-muted)] tabular-nums">
               {r.step_count} step{r.step_count === 1 ? "" : "s"}
             </span>
-            {r.streak_days > 0 && (
-              <span
-                className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800"
-                title={`${r.streak_days}-day streak`}
-              >
-                🔥 {r.streak_days}
-              </span>
-            )}
           </li>
         );
       })}
