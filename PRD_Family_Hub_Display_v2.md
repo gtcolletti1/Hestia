@@ -754,9 +754,9 @@ Every screen must handle these gracefully:
 - [ ] Apple Calendar (CalDAV) and Outlook (Microsoft Graph) sync
 - [ ] PWA with offline support and install prompt
 - [ ] Push notifications to companion devices
-- [ ] Drag-and-drop reordering for list items and routine steps
+- [x] Drag-and-drop reordering for list items and routine steps
 - [ ] Photo integration with Google Photos album
-- [ ] Export/import household data (JSON backup)
+- [x] Export/import household data (JSON backup)
 - [x] Chore assignment per profile (per-step `assigned_profile_id`, US-2.3.8)
 - [ ] Notification bell on dashboard with badge count
 
