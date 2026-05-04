@@ -4,7 +4,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -21,6 +21,18 @@ class CalendarProvider(str, enum.Enum):
 
 class SourceCalendar(Base):
     __tablename__ = "source_calendars"
+
+    __table_args__ = (
+        Index(
+            "uq_source_calendars_household_provider_external",
+            "household_id",
+            "provider",
+            "external_id",
+            unique=True,
+            postgresql_where=text("provider != 'local' AND external_id IS NOT NULL"),
+            sqlite_where=text("provider != 'local' AND external_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

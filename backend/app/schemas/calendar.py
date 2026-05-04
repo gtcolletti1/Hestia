@@ -78,6 +78,7 @@ class SourceCalendarBase(BaseModel):
 class SourceCalendarCreate(SourceCalendarBase):
     household_id: uuid.UUID
     profile_id: uuid.UUID | None = None
+    external_id: str | None = None
 
 
 class SourceCalendarUpdate(BaseModel):

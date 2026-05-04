@@ -176,6 +176,24 @@ async def create_calendar(
 ) -> SourceCalendar:
     if current_profile.household_id != data.household_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    # Refuse silent double-connections of the same external calendar.
+    # Local calendars may share NULL external_ids freely.
+    if data.provider.value != "local" and data.external_id:
+        dup_stmt = select(SourceCalendar).where(
+            SourceCalendar.household_id == data.household_id,
+            SourceCalendar.provider == data.provider,
+            SourceCalendar.external_id == data.external_id,
+        )
+        if (await db.execute(dup_stmt)).scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This calendar is already connected. Use the existing "
+                    "entry instead of adding a duplicate."
+                ),
+            )
+
     cal = SourceCalendar(**data.model_dump())
     db.add(cal)
     await db.flush()

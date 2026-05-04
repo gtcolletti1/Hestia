@@ -358,6 +358,22 @@ async def subscribe_ical(
             "iCal/.ics address (not the public HTML link)",
         )
 
+    # Refuse silent double-connections to the same iCal URL.
+    dup = await db.execute(
+        select(SourceCalendar).where(
+            SourceCalendar.household_id == payload.household_id,
+            SourceCalendar.provider == CalendarProvider.ical,
+            SourceCalendar.external_id == url,
+        )
+    )
+    if dup.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This iCal URL is already subscribed in this household."
+            ),
+        )
+
     cal = SourceCalendar(
         household_id=payload.household_id,
         profile_id=payload.profile_id,
