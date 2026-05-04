@@ -202,7 +202,20 @@ class GoogleCalendarClient:
 
 
 def map_google_event_to_local(google_event: dict) -> dict:
-    """Map a Google Calendar event to local Event model fields."""
+    """Map a Google Calendar event to local Event model fields.
+
+    Handles three shapes:
+
+    * **Single events** — no recurrence, no ``recurringEventId``.
+    * **Recurring masters** — own a ``recurrence`` array with one RRULE
+      and zero-or-more ``EXDATE`` lines. ``master_external_id`` is set
+      to the event id so override lookups (which key on
+      ``(source_calendar_id, master_external_id)``) match.
+    * **Modified instances** — carry ``recurringEventId`` (the master)
+      and ``originalStartTime`` (the slot they replace). We persist
+      these as override rows; the dedup in event_expansion then skips
+      the master's natural occurrence at that instant.
+    """
     start = google_event.get("start", {})
     end = google_event.get("end", {})
 
@@ -217,11 +230,45 @@ def map_google_event_to_local(google_event: dict) -> dict:
         start_time = datetime.fromisoformat(start.get("dateTime", ""))
         end_time = datetime.fromisoformat(end.get("dateTime", ""))
 
-    recurrence = google_event.get("recurrence")
-    recurrence_rule = recurrence[0] if recurrence else None
+    # Pull RRULE + EXDATE entries out of the recurrence array (master only).
+    recurrence_rule: str | None = None
+    exdates: str | None = None
+    recurrence = google_event.get("recurrence") or []
+    rrule_lines = [r for r in recurrence if r.startswith("RRULE")]
+    exdate_lines = [r for r in recurrence if r.startswith("EXDATE")]
+    if rrule_lines:
+        recurrence_rule = rrule_lines[0]
+    if exdate_lines:
+        parsed = _parse_google_exdates(exdate_lines)
+        if parsed:
+            exdates = ",".join(dt.isoformat() for dt in parsed)
+
+    # Override-instance fields.
+    recurring_event_id = google_event.get("recurringEventId")
+    recurrence_id: datetime | None = None
+    original = google_event.get("originalStartTime") or {}
+    orig_dt = original.get("dateTime") or original.get("date")
+    if orig_dt:
+        try:
+            parsed_orig = datetime.fromisoformat(orig_dt)
+            if parsed_orig.tzinfo is None:
+                parsed_orig = parsed_orig.replace(tzinfo=timezone.utc)
+            recurrence_id = parsed_orig.astimezone(timezone.utc)
+        except ValueError:
+            logger.warning("Unparseable originalStartTime %r", orig_dt)
+
+    event_id = google_event.get("id")
+    if recurring_event_id:
+        master_external_id = recurring_event_id
+    elif recurrence_rule:
+        master_external_id = event_id
+    else:
+        master_external_id = None
 
     return {
-        "external_id": google_event.get("id"),
+        "external_id": event_id,
+        "master_external_id": master_external_id,
+        "recurrence_id": recurrence_id,
         "title": google_event.get("summary", "(No title)"),
         "description": google_event.get("description"),
         "location": google_event.get("location"),
@@ -229,8 +276,53 @@ def map_google_event_to_local(google_event: dict) -> dict:
         "end_time": end_time,
         "all_day": all_day,
         "recurrence_rule": recurrence_rule,
+        "exdates": exdates,
+        "start_tzid": start.get("timeZone") if not all_day else None,
         "is_private": google_event.get("visibility") == "private",
     }
+
+
+def _parse_google_exdates(lines: list[str]) -> list[datetime]:
+    """Parse Google's ``EXDATE[;TZID=zone]:YYYYMMDDTHHMMSS[Z][,...]`` lines
+    into UTC-aware datetimes."""
+    out: list[datetime] = []
+    for line in lines:
+        head, _, value = line.partition(":")
+        if not value:
+            continue
+        tzid: str | None = None
+        for part in head.split(";")[1:]:
+            if part.upper().startswith("TZID="):
+                tzid = part.split("=", 1)[1]
+        try:
+            tz: Any = timezone.utc
+            if tzid:
+                from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+                try:
+                    tz = ZoneInfo(tzid)
+                except ZoneInfoNotFoundError:
+                    logger.warning("Unknown TZID in EXDATE %r", tzid)
+                    continue
+        except Exception:  # pragma: no cover  defensive
+            tz = timezone.utc
+        for piece in value.split(","):
+            piece = piece.strip()
+            if not piece:
+                continue
+            try:
+                if piece.endswith("Z"):
+                    dt = datetime.strptime(piece, "%Y%m%dT%H%M%SZ").replace(
+                        tzinfo=timezone.utc
+                    )
+                elif "T" in piece:
+                    dt = datetime.strptime(piece, "%Y%m%dT%H%M%S").replace(tzinfo=tz)
+                else:
+                    dt = datetime.strptime(piece, "%Y%m%d").replace(tzinfo=tz)
+                out.append(dt.astimezone(timezone.utc))
+            except ValueError:
+                logger.warning("Skipping malformed Google EXDATE %r", piece)
+    return out
 
 
 def map_local_event_to_google(event: Event) -> dict:

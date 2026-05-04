@@ -229,11 +229,39 @@ def map_outlook_event_to_local(outlook_event: dict) -> dict:
         pattern = recurrence["pattern"]
         recurrence_rule = _outlook_recurrence_to_rrule(pattern)
 
+    # Override-instance fields (Graph: type=exception|occurrence carries
+    # seriesMasterId; originalStart is the slot it replaces).
+    series_master_id = outlook_event.get("seriesMasterId")
+    event_id = outlook_event.get("id")
+    if series_master_id:
+        master_external_id = series_master_id
+    elif recurrence_rule:
+        master_external_id = event_id
+    else:
+        master_external_id = None
+
+    recurrence_id_dt: datetime | None = None
+    original_start = outlook_event.get("originalStart")
+    if original_start:
+        try:
+            parsed = datetime.fromisoformat(
+                original_start.replace("Z", "+00:00")
+                if original_start.endswith("Z")
+                else original_start
+            )
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            recurrence_id_dt = parsed.astimezone(timezone.utc)
+        except ValueError:
+            logger.warning("Unparseable Outlook originalStart %r", original_start)
+
     body = outlook_event.get("body", {})
     description = body.get("content") if body.get("contentType") == "text" else None
 
     return {
-        "external_id": outlook_event.get("id"),
+        "external_id": event_id,
+        "master_external_id": master_external_id,
+        "recurrence_id": recurrence_id_dt,
         "title": outlook_event.get("subject", "(No title)"),
         "description": description,
         "location": _extract_outlook_location(outlook_event),
@@ -241,6 +269,7 @@ def map_outlook_event_to_local(outlook_event: dict) -> dict:
         "end_time": end_time,
         "all_day": all_day,
         "recurrence_rule": recurrence_rule,
+        "start_tzid": start_tz if start_tz != "UTC" else None,
         "is_private": outlook_event.get("sensitivity") == "private",
     }
 
