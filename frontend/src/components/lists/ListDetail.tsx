@@ -4,6 +4,22 @@ import { format } from "date-fns";
 import { lists as listsApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import type { TaskList, ListItem } from "@/types";
+import SortableItem, { DragHandle } from "@/components/common/SortableItem";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 
 type List = TaskList;
 
@@ -31,6 +47,49 @@ export default function ListDetail({ list, onClose, onEdit }: Props) {
     if (a.is_checked !== b.is_checked) return a.is_checked ? 1 : -1;
     return a.sort_order - b.sort_order;
   });
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const reorderItems = useMutation({
+    mutationFn: (item_ids: string[]) =>
+      listsApi.reorder(list.id, { item_ids }),
+    // Optimistic update so the row settles into place instantly.
+    onMutate: async (item_ids) => {
+      await queryClient.cancelQueries({ queryKey: ["lists", list.id] });
+      const previous = queryClient.getQueryData<List>(["lists", list.id]);
+      if (previous) {
+        const positionById = new Map(item_ids.map((id, idx) => [id, idx]));
+        queryClient.setQueryData<List>(["lists", list.id], {
+          ...previous,
+          items: previous.items.map((it) => ({
+            ...it,
+            sort_order: positionById.get(it.id) ?? it.sort_order,
+          })),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(["lists", list.id], ctx.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["lists", list.id] });
+      queryClient.invalidateQueries({ queryKey: ["lists"] });
+    },
+  });
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = sortedItems.findIndex((i) => i.id === active.id);
+    const newIndex = sortedItems.findIndex((i) => i.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const next = arrayMove(sortedItems, oldIndex, newIndex);
+    reorderItems.mutate(next.map((i) => i.id));
+  };
 
   const toggleItem = useMutation({
     mutationFn: (item: ListItem) => listsApi.toggleItem(list.id, item.id),
@@ -117,82 +176,100 @@ export default function ListDetail({ list, onClose, onEdit }: Props) {
           </p>
         )}
 
-        <ul className="divide-y divide-gray-100 dark:divide-gray-800">
-          {sortedItems.map((item) => (
-            <li key={item.id} className="group relative">
-              <div
-                className={`flex items-center gap-3 px-2 py-3 transition ${
-                  item.is_checked ? "opacity-60" : ""
-                }`}
-              >
-                {/* Checkbox */}
-                <button
-                  onClick={() => toggleItem.mutate(item)}
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border-2 transition active:scale-90 ${
-                    item.is_checked
-                      ? "border-green-500 bg-green-500 text-white"
-                      : "border-gray-300 hover:border-gray-400 dark:border-gray-600"
-                  }`}
-                  aria-label={item.is_checked ? "Uncheck item" : "Check item"}
-                >
-                  {item.is_checked && (
-                    <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={sortedItems.map((i) => i.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+              {sortedItems.map((item) => (
+                <SortableItem key={item.id} id={item.id}>
+                  {({ handleProps }) => (
+                    <li className="group relative list-none">
+                      <div
+                        className={`flex items-center gap-2 px-2 py-3 transition ${
+                          item.is_checked ? "opacity-60" : ""
+                        }`}
+                      >
+                        {/* Drag handle */}
+                        <DragHandle {...handleProps} />
+
+                        {/* Checkbox */}
+                        <button
+                          onClick={() => toggleItem.mutate(item)}
+                          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border-2 transition active:scale-90 ${
+                            item.is_checked
+                              ? "border-green-500 bg-green-500 text-white"
+                              : "border-gray-300 hover:border-gray-400 dark:border-gray-600"
+                          }`}
+                          aria-label={item.is_checked ? "Uncheck item" : "Check item"}
+                        >
+                          {item.is_checked && (
+                            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                              <path
+                                fillRule="evenodd"
+                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                          )}
+                        </button>
+
+                        {/* Content */}
+                        <div className="flex-1">
+                          <span
+                            className={`text-base ${
+                              item.is_checked ? "text-gray-400 line-through dark:text-gray-500" : ""
+                            }`}
+                          >
+                            {item.text}
+                          </span>
+                          <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
+                            {item.assigned_profile_id && (
+                              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                                {profiles.find((p) => p.id === item.assigned_profile_id)?.name || "Assigned"}
+                              </span>
+                            )}
+                            {item.due_date && <span>Due {format(new Date(item.due_date), "MMM d")}</span>}
+                          </div>
+                        </div>
+
+                        {/* Delete */}
+                        {deletingId === item.id ? (
+                          <button
+                            onClick={() => deleteItem.mutate(item.id)}
+                            className="min-h-[44px] min-w-[44px] rounded-xl bg-red-600 px-3 py-2 text-sm font-medium text-white active:scale-95"
+                          >
+                            Confirm
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setDeletingId(item.id)}
+                            className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-gray-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100"
+                            aria-label="Delete item"
+                          >
+                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </li>
                   )}
-                </button>
-
-                {/* Content */}
-                <div className="flex-1">
-                  <span
-                    className={`text-base ${
-                      item.is_checked ? "text-gray-400 line-through dark:text-gray-500" : ""
-                    }`}
-                  >
-                    {item.text}
-                  </span>
-                  <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500">
-                    {item.assigned_profile_id && (
-                      <span className="rounded-full bg-purple-100 px-2 py-0.5 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
-                        {profiles.find((p) => p.id === item.assigned_profile_id)?.name || "Assigned"}
-                      </span>
-                    )}
-                    {item.due_date && <span>Due {format(new Date(item.due_date), "MMM d")}</span>}
-                  </div>
-                </div>
-
-                {/* Delete */}
-                {deletingId === item.id ? (
-                  <button
-                    onClick={() => deleteItem.mutate(item.id)}
-                    className="min-h-[44px] min-w-[44px] rounded-xl bg-red-600 px-3 py-2 text-sm font-medium text-white active:scale-95"
-                  >
-                    Confirm
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => setDeletingId(item.id)}
-                    className="min-h-[44px] min-w-[44px] rounded-xl p-2 text-gray-400 opacity-0 transition hover:text-red-500 group-hover:opacity-100"
-                    aria-label="Delete item"
-                  >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                      />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+                </SortableItem>
+              ))}
+            </ul>
+          </SortableContext>
+        </DndContext>
       </div>
 
       {/* Quick-add input — always visible at bottom */}

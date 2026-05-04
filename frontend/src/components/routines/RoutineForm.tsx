@@ -3,6 +3,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { routines as routinesApi, profiles as profilesApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import EmojiPicker from "@/components/shared/EmojiPicker";
+import SortableItem, { DragHandle } from "@/components/common/SortableItem";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import type { Routine, RoutineTemplate } from "@/types";
 
 /** Convert "HH:MM" or "HH:MM:SS" (24h) → { hour12, minute, period } */
@@ -298,6 +314,22 @@ export default function RoutineForm({
     });
   };
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleStepDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setSteps((prev) => {
+      const oldIndex = prev.findIndex((s) => s.key === active.id);
+      const newIndex = prev.findIndex((s) => s.key === over.id);
+      if (oldIndex < 0 || newIndex < 0) return prev;
+      return arrayMove(prev, oldIndex, newIndex);
+    });
+  };
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const filteredSteps = steps
@@ -454,167 +486,182 @@ export default function RoutineForm({
           })()}
         </div>
         <div className="space-y-2">
-          {steps.map((step, index) => {
-            const stepDays = step.days_of_week ?? daysOfWeek;
-            const isCustomized = step.days_of_week !== null;
-            return (
-              <div
-                key={step.key}
-                className="rounded-xl border border-transparent bg-gray-50 p-2 dark:bg-gray-800/40"
-              >
-                <div className="flex items-center gap-2">
-                  {/* Reorder */}
-                  <div className="flex flex-col">
-                    <button
-                      type="button"
-                      onClick={() => moveStep(index, -1)}
-                      disabled={index === 0}
-                      className="min-h-[22px] min-w-[22px] text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                      aria-label="Move up"
-                    >
-                      ▲
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveStep(index, 1)}
-                      disabled={index === steps.length - 1}
-                      className="min-h-[22px] min-w-[22px] text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                      aria-label="Move down"
-                    >
-                      ▼
-                    </button>
-                  </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleStepDragEnd}
+          >
+            <SortableContext
+              items={steps.map((s) => s.key)}
+              strategy={verticalListSortingStrategy}
+            >
+              {steps.map((step, index) => {
+                const stepDays = step.days_of_week ?? daysOfWeek;
+                const isCustomized = step.days_of_week !== null;
+                return (
+                  <SortableItem key={step.key} id={step.key}>
+                    {({ handleProps }) => (
+                      <div className="rounded-xl border border-transparent bg-gray-50 p-2 dark:bg-gray-800/40">
+                        <div className="flex items-center gap-2">
+                          {/* Drag handle (pointer + keyboard) */}
+                          <DragHandle {...handleProps} />
 
-                  {/* Icon */}
-                  <EmojiPicker
-                    value={step.icon}
-                    onChange={(v) => updateStep(step.key, "icon", v)}
-                    placeholder="🪥"
-                    ariaLabel={`Icon for step ${index + 1}`}
-                  />
+                          {/* Reorder fallback (kept for explicit one-step nudges) */}
+                          <div className="flex flex-col">
+                            <button
+                              type="button"
+                              onClick={() => moveStep(index, -1)}
+                              disabled={index === 0}
+                              className="min-h-[22px] min-w-[22px] text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                              aria-label="Move up"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveStep(index, 1)}
+                              disabled={index === steps.length - 1}
+                              className="min-h-[22px] min-w-[22px] text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                              aria-label="Move down"
+                            >
+                              ▼
+                            </button>
+                          </div>
 
-                  {/* Label */}
-                  <input
-                    type="text"
-                    value={step.label}
-                    onChange={(e) => updateStep(step.key, "label", e.target.value)}
-                    placeholder={`Step ${index + 1}`}
-                    className="touch-target flex-1 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-800"
-                  />
+                          {/* Icon */}
+                          <EmojiPicker
+                            value={step.icon}
+                            onChange={(v) => updateStep(step.key, "icon", v)}
+                            placeholder="🪥"
+                            ariaLabel={`Icon for step ${index + 1}`}
+                          />
 
-                  {/* Points */}
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min={0}
-                      value={step.points_value}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 0;
-                        setSteps((prev) =>
-                          prev.map((s) =>
-                            s.key === step.key ? { ...s, points_value: val } : s,
-                          ),
-                        );
-                      }}
-                      className="touch-target w-14 rounded-lg border border-gray-300 text-center text-sm dark:border-gray-600 dark:bg-gray-800"
-                      title="Points for completing this step"
-                    />
-                    <span className="text-xs text-gray-400">⭐</span>
-                  </div>
+                          {/* Label */}
+                          <input
+                            type="text"
+                            value={step.label}
+                            onChange={(e) => updateStep(step.key, "label", e.target.value)}
+                            placeholder={`Step ${index + 1}`}
+                            className="touch-target flex-1 rounded-lg border border-gray-300 px-3 dark:border-gray-600 dark:bg-gray-800"
+                          />
 
-                  {/* Remove */}
-                  <button
-                    type="button"
-                    onClick={() => removeStep(step.key)}
-                    disabled={steps.length <= 1}
-                    className="touch-target rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 dark:hover:bg-red-900/20"
-                    aria-label="Remove step"
-                  >
-                    ✕
-                  </button>
-                </div>
+                          {/* Points */}
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              value={step.points_value}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value) || 0;
+                                setSteps((prev) =>
+                                  prev.map((s) =>
+                                    s.key === step.key ? { ...s, points_value: val } : s,
+                                  ),
+                                );
+                              }}
+                              className="touch-target w-14 rounded-lg border border-gray-300 text-center text-sm dark:border-gray-600 dark:bg-gray-800"
+                              title="Points for completing this step"
+                            />
+                            <span className="text-xs text-gray-400">⭐</span>
+                          </div>
 
-                {/* Per-step day filter — defaults to "every routine day" (chips
-                    match the parent routine's days_of_week). Tap any chip to
-                    narrow this step to specific days only. */}
-                <div className="mt-2 flex items-center gap-2 pl-7 text-xs">
-                  <span className="text-gray-400">On:</span>
-                  <div className="flex gap-1">
-                    {DAYS.map((label, i) => {
-                      const inRoutine = daysOfWeek.includes(i);
-                      const active = stepDays.includes(i);
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          disabled={!inRoutine}
-                          onClick={() => toggleStepDay(step.key, i)}
-                          className={`min-h-[28px] min-w-[28px] rounded-md border text-[11px] font-semibold transition ${
-                            !inRoutine
-                              ? "cursor-not-allowed border-gray-200 text-gray-300 dark:border-gray-700 dark:text-gray-600"
-                              : active
-                                ? "border-blue-500 bg-blue-500 text-white"
-                                : "border-gray-300 text-gray-500 hover:border-blue-400 dark:border-gray-600"
-                          }`}
-                          title={
-                            !inRoutine
-                              ? "Add this day at the routine level first"
-                              : undefined
-                          }
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {isCustomized && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSteps((prev) =>
-                          prev.map((s) =>
-                            s.key === step.key ? { ...s, days_of_week: null } : s,
-                          ),
-                        )
-                      }
-                      className="text-[11px] text-gray-400 underline hover:text-gray-600"
-                    >
-                      reset
-                    </button>
-                  )}
-                </div>
+                          {/* Remove */}
+                          <button
+                            type="button"
+                            onClick={() => removeStep(step.key)}
+                            disabled={steps.length <= 1}
+                            className="touch-target rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30 dark:hover:bg-red-900/20"
+                            aria-label="Remove step"
+                          >
+                            ✕
+                          </button>
+                        </div>
 
-                {/* School-day-only toggle — hides this step on weekends,
-                    US federal holidays, and admin-marked school closures
-                    (snow days etc.). Useful for "pack backpack", "lunchbox". */}
-                <label className="mt-2 flex items-center gap-2 pl-7 text-xs text-gray-500 dark:text-gray-400">
-                  <input
-                    type="checkbox"
-                    checked={step.school_day_only}
-                    onChange={(e) =>
-                      setSteps((prev) =>
-                        prev.map((s) =>
-                          s.key === step.key
-                            ? { ...s, school_day_only: e.target.checked }
-                            : s,
-                        ),
-                      )
-                    }
-                    className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-400"
-                  />
-                  <span>
-                    Only on school days
-                    <span
-                      className="ml-1 cursor-help text-gray-400"
-                      title="Skipped on weekends, US federal holidays, and admin-marked school closures."
-                    >
-                      ⓘ
-                    </span>
-                  </span>
-                </label>
-              </div>
-            );
-          })}
+                        {/* Per-step day filter — defaults to "every routine day" (chips
+                            match the parent routine's days_of_week). Tap any chip to
+                            narrow this step to specific days only. */}
+                        <div className="mt-2 flex items-center gap-2 pl-7 text-xs">
+                          <span className="text-gray-400">On:</span>
+                          <div className="flex gap-1">
+                            {DAYS.map((label, i) => {
+                              const inRoutine = daysOfWeek.includes(i);
+                              const active = stepDays.includes(i);
+                              return (
+                                <button
+                                  key={i}
+                                  type="button"
+                                  disabled={!inRoutine}
+                                  onClick={() => toggleStepDay(step.key, i)}
+                                  className={`min-h-[28px] min-w-[28px] rounded-md border text-[11px] font-semibold transition ${
+                                    !inRoutine
+                                      ? "cursor-not-allowed border-gray-200 text-gray-300 dark:border-gray-700 dark:text-gray-600"
+                                      : active
+                                        ? "border-blue-500 bg-blue-500 text-white"
+                                        : "border-gray-300 text-gray-500 hover:border-blue-400 dark:border-gray-600"
+                                  }`}
+                                  title={
+                                    !inRoutine
+                                      ? "Add this day at the routine level first"
+                                      : undefined
+                                  }
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {isCustomized && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setSteps((prev) =>
+                                  prev.map((s) =>
+                                    s.key === step.key ? { ...s, days_of_week: null } : s,
+                                  ),
+                                )
+                              }
+                              className="text-[11px] text-gray-400 underline hover:text-gray-600"
+                            >
+                              reset
+                            </button>
+                          )}
+                        </div>
+
+                        {/* School-day-only toggle — hides this step on weekends,
+                            US federal holidays, and admin-marked school closures
+                            (snow days etc.). Useful for "pack backpack", "lunchbox". */}
+                        <label className="mt-2 flex items-center gap-2 pl-7 text-xs text-gray-500 dark:text-gray-400">
+                          <input
+                            type="checkbox"
+                            checked={step.school_day_only}
+                            onChange={(e) =>
+                              setSteps((prev) =>
+                                prev.map((s) =>
+                                  s.key === step.key
+                                    ? { ...s, school_day_only: e.target.checked }
+                                    : s,
+                                ),
+                              )
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-blue-500 focus:ring-blue-400"
+                          />
+                          <span>
+                            Only on school days
+                            <span
+                              className="ml-1 cursor-help text-gray-400"
+                              title="Skipped on weekends, US federal holidays, and admin-marked school closures."
+                            >
+                              ⓘ
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                    )}
+                  </SortableItem>
+                );
+              })}
+            </SortableContext>
+          </DndContext>
         </div>
 
         <button
