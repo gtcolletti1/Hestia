@@ -99,6 +99,12 @@ export interface SplashVacation {
   end_date?: string | null;
 }
 
+export interface SplashSchoolDay {
+  is_school_day: boolean;
+  reason?: string | null;
+  hidden_step_count?: number;
+}
+
 export interface SplashResponse {
   household_id: string;
   household_name: string;
@@ -110,4 +116,5 @@ export interface SplashResponse {
   weather: SplashWeather | null;
   policy: SplashPolicy;
   vacation?: SplashVacation | null;
+  school_day?: SplashSchoolDay | null;
 }

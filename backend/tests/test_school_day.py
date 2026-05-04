@@ -141,3 +141,36 @@ def test_step_without_school_day_flag_unaffected():
     # Same step, school day or not — applies on weekdays in the gate.
     assert step_applies_on(step, weekday=2, is_school_day=True) is True
     assert step_applies_on(step, weekday=2, is_school_day=False) is True
+
+
+def test_reason_for_returns_holiday_name_and_closure_reason():
+    """``reason_for`` powers the splash/home banner: it returns the
+    holiday name for federal holidays, the admin-supplied reason (or a
+    generic fallback) for closures, and ``None`` for weekends and
+    regular school days."""
+    from app.services.school_day import SchoolDayContext
+
+    ctx = SchoolDayContext(
+        country="US",
+        subdiv=None,
+        year=2026,
+        manual_closures={
+            date(2026, 1, 15): "Snow day",
+            date(2026, 3, 17): None,  # closure recorded without a reason
+        },
+    )
+
+    # Holiday → human-readable name from the `holidays` package.
+    mlk = ctx.reason_for(date(2026, 1, 19))
+    assert mlk is not None and "Luther King" in mlk
+
+    # Admin closure with reason.
+    assert ctx.reason_for(date(2026, 1, 15)) == "Snow day"
+
+    # Admin closure without reason → generic fallback.
+    assert ctx.reason_for(date(2026, 3, 17)) == "School closure"
+
+    # Weekend → no banner (None) even though it isn't a school day.
+    assert ctx.reason_for(date(2026, 1, 17)) is None  # Saturday
+    # Regular weekday → None.
+    assert ctx.reason_for(date(2026, 5, 5)) is None

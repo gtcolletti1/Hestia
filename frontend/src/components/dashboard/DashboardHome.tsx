@@ -320,6 +320,24 @@ export default function DashboardHome() {
         </div>
       )}
 
+      {data?.school_day?.reason && (
+        <div className="flex items-start gap-3 rounded-xl border border-sky-300 bg-sky-50 p-4 text-sky-900 dark:border-sky-700 dark:bg-sky-900/20 dark:text-sky-200">
+          <span className="text-2xl" aria-hidden>🎒</span>
+          <div className="flex-1">
+            <p className="font-semibold">
+              No school today — {data.school_day.reason}
+            </p>
+            <p className="text-sm opacity-90">
+              {(data.school_day.hidden_step_count ?? 0) > 0
+                ? `${data.school_day.hidden_step_count} routine step${
+                    data.school_day.hidden_step_count === 1 ? "" : "s"
+                  } marked “Only on school days” are hidden.`
+                : "Routine steps marked “Only on school days” are hidden."}
+            </p>
+          </div>
+        </div>
+      )}
+
       {!isLoading && !hasAnyModule && (
         <div className="rounded-xl border border-dashed border-gray-300 dark:border-gray-600 p-8 text-center">
           <p className="text-lg text-gray-400 dark:text-gray-500">

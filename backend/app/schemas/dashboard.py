@@ -55,6 +55,19 @@ class VacationStatus(BaseModel):
     end_date: dt.date | None = None  # None = indefinite
 
 
+class SchoolDayStatus(BaseModel):
+    """Tells the home/dashboard whether today is a school day for the
+    household. ``reason`` is ``None`` on weekends and on regular school
+    days; populated for US federal holidays (e.g. ``"Martin Luther King
+    Jr. Day"``) and admin-marked closures (snow days, in-service days)
+    so the home view can show a short banner explaining why
+    ``school_day_only`` routine steps are absent."""
+
+    is_school_day: bool
+    reason: str | None = None
+    hidden_step_count: int = 0
+
+
 class DashboardResponse(BaseModel):
     date: dt.date
     profiles: list[ProfileSummary]
@@ -63,3 +76,4 @@ class DashboardResponse(BaseModel):
     today_meals: list[MealPlanResponse]
     active_lists: list[ActiveListSummary]
     vacation: VacationStatus | None = None
+    school_day: SchoolDayStatus | None = None

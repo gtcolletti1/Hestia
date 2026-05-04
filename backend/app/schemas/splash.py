@@ -111,6 +111,22 @@ class SplashVacation(BaseModel):
     end_date: dt.date | None = None
 
 
+class SplashSchoolDay(BaseModel):
+    """Tells the splash whether today is a school day for the household
+    and surfaces the human-readable reason when it is not (e.g. a US
+    federal holiday or admin-marked closure). The splash uses this to
+    show a small banner explaining why ``school_day_only`` routine
+    steps are missing today.
+
+    Weekends never produce a banner — ``reason`` is ``None`` on
+    Saturdays/Sundays even though ``is_school_day`` is ``False``.
+    """
+
+    is_school_day: bool
+    reason: str | None = None
+    hidden_step_count: int = 0
+
+
 class SplashResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -127,3 +143,4 @@ class SplashResponse(BaseModel):
     weather: SplashWeather | None = None
     messages: list[SplashMessage] | None = None
     vacation: SplashVacation | None = None
+    school_day: SplashSchoolDay | None = None

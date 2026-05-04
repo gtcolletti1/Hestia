@@ -35,7 +35,10 @@ from app.services.routine_window import (
     load_active_overrides,
     current_time_block,
 )
-from app.services.school_day import load_school_day_context
+from app.services.school_day import (
+    count_hidden_school_day_steps,
+    load_school_day_context,
+)
 from app.schemas.splash import (
     SplashClock,
     SplashDay,
@@ -46,6 +49,7 @@ from app.schemas.splash import (
     SplashResponse,
     SplashRoutine,
     SplashRoutineAssignee,
+    SplashSchoolDay,
     SplashVacation,
 )
 
@@ -380,6 +384,22 @@ async def get_splash(
         else None
     )
 
+    # School-day banner — independent from the routines section so it
+    # surfaces even when the routines block is hidden by policy. Loaded
+    # unconditionally; it's a single household lookup + closure scan.
+    school_ctx = await load_school_day_context(db, household.id, today.year)
+    school_reason = school_ctx.reason_for(today)
+    school_hidden = (
+        await count_hidden_school_day_steps(db, household.id, today)
+        if school_reason is not None
+        else 0
+    )
+    school_day = SplashSchoolDay(
+        is_school_day=school_ctx.is_school_day(today),
+        reason=school_reason,
+        hidden_step_count=school_hidden,
+    )
+
     meals: list[SplashMeal] | None = None
     if settings.splash_show_meals:
         meals = await _build_meals(db, household.id, today)
@@ -465,4 +485,5 @@ async def get_splash(
         weather=weather,
         messages=messages,
         vacation=vacation,
+        school_day=school_day,
     )

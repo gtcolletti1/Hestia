@@ -30,7 +30,7 @@ interface SplashContentProps {
  * - The agenda block self-trims to fit the viewport (see ``AgendaBlock``).
  */
 export default function SplashContent({ data, timeFormat }: SplashContentProps) {
-  const { clock, days, routines, meals, weather, messages, vacation } = data;
+  const { clock, days, routines, meals, weather, messages, vacation, school_day } = data;
 
   const hasAgenda = days !== null && days.length > 0;
   const hasRoutines = routines !== null && routines.length > 0;
@@ -38,6 +38,7 @@ export default function SplashContent({ data, timeFormat }: SplashContentProps) 
   const hasWeather = weather !== null && weather.available;
   const hasMessages = messages !== null && messages.length > 0;
   const onVacation = !!vacation?.active;
+  const schoolBanner = school_day?.reason ? school_day : null;
 
   return (
     <div className="relative flex h-full w-full flex-col gap-4 px-6 sm:px-8 pt-[38vh] pb-6 text-[color:var(--splash-text)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.45)]">
@@ -53,6 +54,23 @@ export default function SplashContent({ data, timeFormat }: SplashContentProps) 
             </p>
             {vacation?.reason && (
               <p className="truncate text-sm opacity-90">{vacation.reason}</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {schoolBanner && (
+        <div className="flex items-center gap-3 rounded-2xl bg-sky-600/85 px-5 py-3 text-white shadow-lg backdrop-blur">
+          <span className="text-2xl" aria-hidden>🎒</span>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold leading-tight">
+              No school today — {schoolBanner.reason}
+            </p>
+            {(schoolBanner.hidden_step_count ?? 0) > 0 && (
+              <p className="truncate text-sm opacity-90">
+                {schoolBanner.hidden_step_count} school-day step
+                {(schoolBanner.hidden_step_count ?? 0) === 1 ? "" : "s"} hidden
+              </p>
             )}
           </div>
         </div>

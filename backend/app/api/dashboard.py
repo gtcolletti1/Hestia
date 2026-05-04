@@ -22,6 +22,7 @@ from app.schemas.dashboard import (
     DashboardResponse,
     EventSummary,
     ProfileSummary,
+    SchoolDayStatus,
     VacationStatus,
 )
 from app.services.event_expansion import expand_events_in_range
@@ -34,7 +35,10 @@ from app.services.routine_window import (
     load_active_overrides,
     current_time_block,
 )
-from app.services.school_day import load_school_day_context
+from app.services.school_day import (
+    count_hidden_school_day_steps,
+    load_school_day_context,
+)
 
 router = APIRouter(tags=["dashboard"])
 
@@ -264,5 +268,14 @@ async def get_dashboard(
             )
             if (vac := household_vacation_on(overrides, today)) is not None
             else None
+        ),
+        school_day=SchoolDayStatus(
+            is_school_day=today_is_school,
+            reason=school_ctx.reason_for(today),
+            hidden_step_count=(
+                await count_hidden_school_day_steps(db, household_id, today)
+                if school_ctx.reason_for(today) is not None
+                else 0
+            ),
         ),
     )

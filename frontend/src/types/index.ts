@@ -127,6 +127,12 @@ export interface VacationStatus {
   end_date?: string | null;
 }
 
+export interface SchoolDayStatus {
+  is_school_day: boolean;
+  reason?: string | null;
+  hidden_step_count?: number;
+}
+
 export interface DashboardData {
   date: string;
   profiles: Profile[];
@@ -139,6 +145,7 @@ export interface DashboardData {
     checked_count: number;
   }[];
   vacation?: VacationStatus | null;
+  school_day?: SchoolDayStatus | null;
 }
 
 export interface AgendaBucket {
