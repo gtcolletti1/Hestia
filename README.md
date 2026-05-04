@@ -96,14 +96,18 @@ family-hub/
 ## Features
 
 - **Shared family calendar** — Day/week/month views, color-coded by person
-- **External calendar sync** — Google, Outlook, iCal/Apple Calendar
-- **Kid-friendly routines** — Step-by-step checklists with per-step day-of-week scheduling, scheduled-day streaks, and parental overrides (per-routine pause / skip-today and household-wide Vacation Mode). Routines marked `pausable_on_vacation = false` (e.g., medications) keep running through vacations. Stepper state is server-backed: re-opening a routine shows the steps you've already ticked, and routines done for the day disappear from Splash and Home.
+- **External calendar sync** — Google, Outlook, iCal/Apple Calendar (read-only; two-way write-back planned)
+- **Kid-friendly routines** — Step-by-step checklists with per-step day-of-week scheduling, **per-step "school days only" gating** against country/state holiday calendars + admin-managed school closures, **per-step chore assignment** so each step belongs to a specific child, scheduled-day streaks, and parental overrides (per-routine pause / skip-today and household-wide Vacation Mode). Routines marked `pausable_on_vacation = false` (e.g., medications) keep running through vacations. Stepper state is server-backed: re-opening a routine shows the steps you've already ticked, and routines done for the day disappear from Splash and Home.
+- **Drag-and-drop reordering** — Sort routine steps and list items by dragging
+- **Points & rewards** — Steps award points to the assignee; redeemable in a household reward store
 - **Shared lists** — Grocery, to-do, packing lists
 - **Meal planning** — Weekly meal view with assignments
 - **Pre-login splash with admin-controlled privacy** — Ambient agenda, photo frame, or alternating modes shown before login. Admin chooses what (if anything) is disclosed to passersby via per-section toggles and a calendar mode (`off` / `busy_only` / `hidden`). Live local weather and Hestia hearth backdrop included.
-- **Offline-first** — Fully functional without internet
-- **Companion PWA** — Manage from phone when away from home
-- **Home Assistant integration** — Webhooks and REST API
+- **Notification bell** — Header bell on the dashboard surfaces an inbox of household reminders with unread badge and per-entry mark-as-read.
+- **Progressive Web App** — Installable on phones, tablets, and desktops via the Settings → System → "Install as App" button. Offline-first service worker caches the app shell and queues mutations in IndexedDB when offline, replaying them automatically on reconnect. Destructive admin/auth requests are excluded from the queue for safety.
+- **JSON backup & restore** — One-click full-household export/import from Settings → System for portable, vendor-neutral backups, in addition to nightly `pg_dump` snapshots.
+- **Holiday calendar picker** — Pick the country (and optional state/region) used to compute school days; backed by the Python `holidays` package.
+- **Home Assistant integration** — Webhooks and REST API (Phase 3)
 
 ## Development Setup
 
@@ -151,7 +155,9 @@ family-hub/
 
 ## Production Deployment
 
-### Deploying to a Raspberry Pi or Intel NUC
+For a step-by-step walkthrough on a fresh Ubuntu Server (NUC, mini PC, VM, or Raspberry Pi 4/5 running Ubuntu), see **[`UBUNTU_DEPLOYMENT.md`](./UBUNTU_DEPLOYMENT.md)** — covers OS prep, Docker install, cloning, `.env` config, migrations, kiosk mode, TLS, backups, and updating from `git pull`.
+
+### Quick reference (any Linux/macOS host with Docker)
 
 1. Install Docker & Docker Compose on the target device.
 2. Copy the project to the device (or `git clone`).
@@ -160,6 +166,7 @@ family-hub/
 
    ```bash
    docker compose up -d --build
+   docker compose exec backend alembic upgrade head
    ```
 
 5. (Optional) Set up TLS by providing `TLS_CERT_PATH` and `TLS_KEY_PATH` in `.env`.

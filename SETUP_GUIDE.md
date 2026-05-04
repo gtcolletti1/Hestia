@@ -1,6 +1,8 @@
 # Hestia — Setup Guide (macOS)
 
-This is a step-by-step guide to get Hestia (formerly Family Hub Display) running on your Mac.
+This is a step-by-step guide to get Hestia (formerly Family Hub Display) running on your Mac for **local development**.
+
+> Deploying to a real always-on Linux host? See **[`UBUNTU_DEPLOYMENT.md`](./UBUNTU_DEPLOYMENT.md)** for a fresh-Ubuntu-Server walkthrough.
 
 ---
 
@@ -132,16 +134,8 @@ docker compose -f docker-compose.dev.yml exec backend \
   alembic upgrade head
 ```
 
-If Alembic migrations haven't been generated yet, create the tables directly:
-```bash
-docker compose -f docker-compose.dev.yml exec backend \
-  python -c "
-import asyncio
-from app.database import init_db
-asyncio.run(init_db())
-print('Tables created!')
-"
-```
+You should see Alembic walk through the migration chain ending at the current
+head (e.g. `c4d8e1f72a09, notification_inbox`).
 
 ---
 
