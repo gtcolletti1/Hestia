@@ -104,6 +104,22 @@ class StreakInfo(BaseModel):
     total_completions: int
 
 
+class TodayCompletion(BaseModel):
+    """Per-routine, per-profile snapshot of today's progress.
+
+    Returned by GET /api/routines/today/completions and used by the
+    stepper to seed checkbox state and by RoutineList to render a
+    "Done today" badge so users don't have to re-tick what's already
+    been credited.
+    """
+
+    routine_id: uuid.UUID
+    profile_id: uuid.UUID
+    completed_step_ids: list[str]
+    applicable_step_ids: list[str]
+    is_fully_completed: bool
+
+
 # ── Templates ────────────────────────────────────────────────────────────────
 
 

@@ -19,6 +19,7 @@ from app.schemas.routine import (
     RoutineTemplateResponse,
     RoutineUpdate,
     StreakInfo,
+    TodayCompletion,
 )
 from app.services.routine_window import (
     applicable_step_ids,
@@ -122,6 +123,77 @@ async def list_routine_templates(
     the routines namespace.
     """
     return ROUTINE_TEMPLATES
+
+
+# ── Today's completion snapshot (bulk) ───────────────────────────────────────
+
+
+@router.get(
+    "/routines/today/completions",
+    response_model=list[TodayCompletion],
+)
+async def list_today_completions(
+    household_id: uuid.UUID = Query(...),
+    profile_id: uuid.UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_profile: Profile = Depends(get_current_profile),
+) -> list[TodayCompletion]:
+    """Snapshot of today's per-routine progress.
+
+    Powers the stepper (seed checkbox state from existing completions so
+    re-opening a routine doesn't show all steps unchecked) and the
+    routines list "Done today" badge. Filtering by profile_id is optional
+    — without it, every profile's progress on every household routine is
+    returned (useful for the home screen rollup).
+    """
+    if current_profile.household_id != household_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    today = date.today()
+    weekday = today.weekday()
+
+    routines_stmt = (
+        select(Routine)
+        .options(selectinload(Routine.steps))
+        .where(Routine.household_id == household_id)
+    )
+    routines = list((await db.execute(routines_stmt)).scalars().all())
+    by_routine = {r.id: r for r in routines}
+    if not routines:
+        return []
+
+    completions_stmt = select(RoutineCompletion).where(
+        RoutineCompletion.routine_id.in_([r.id for r in routines]),
+        RoutineCompletion.date == today,
+    )
+    if profile_id is not None:
+        completions_stmt = completions_stmt.where(
+            RoutineCompletion.profile_id == profile_id
+        )
+    completions = (await db.execute(completions_stmt)).scalars().all()
+
+    out: list[TodayCompletion] = []
+    for c in completions:
+        r = by_routine.get(c.routine_id)
+        if r is None:
+            continue
+        applicable = applicable_step_ids(r, weekday)
+        completed = list(c.completed_steps or [])
+        # Recompute fully-completed from applicable set so the flag reflects
+        # *today's* schedule rather than whatever was stored at write time.
+        fully = (
+            bool(applicable) and set(applicable).issubset(set(completed))
+        ) or (not r.steps and bool(c.is_fully_completed))
+        out.append(
+            TodayCompletion(
+                routine_id=c.routine_id,
+                profile_id=c.profile_id,
+                completed_step_ids=completed,
+                applicable_step_ids=sorted(applicable),
+                is_fully_completed=fully,
+            )
+        )
+    return out
 
 
 @router.get("/routines/{routine_id}", response_model=RoutineResponse)

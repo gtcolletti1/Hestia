@@ -1,13 +1,21 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { formatTime } from "@/utils/timeFormat";
-import { dashboard } from "@/api/endpoints";
+import { dashboard, routines as routinesApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useHouseholdSettings } from "@/hooks/useHouseholdSettings";
 import WeatherWidget from "./WeatherWidget";
 import MessagesWidget from "./MessagesWidget";
 import LeaderboardWidget from "./LeaderboardWidget";
-import type { DashboardData, AgendaBucket, MealPlan, DashboardRoutine } from "@/types";
+import RoutineStepper from "@/components/routines/RoutineStepper";
+import type {
+  DashboardData,
+  AgendaBucket,
+  MealPlan,
+  DashboardRoutine,
+  Routine,
+} from "@/types";
 
 // ── Helpers ──
 
@@ -107,35 +115,63 @@ function AgendaSection({ buckets, timeFormat }: { buckets: AgendaBucket[]; timeF
   );
 }
 
-function RoutinesWidget({ routines }: { routines: DashboardRoutine[] }) {
+function RoutinesWidget({
+  routines,
+  onOpen,
+}: {
+  routines: DashboardRoutine[];
+  onOpen: (routineId: string) => void;
+}) {
   return (
     <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
       <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
         Active Routines
       </h3>
       {routines.length === 0 ? (
-        <p className="text-sm text-gray-400 italic">No routines set up yet</p>
+        <p className="text-sm text-gray-400 italic">
+          Nothing left for this time block — nice work!
+        </p>
       ) : (
         <ul className="space-y-2">
           {routines.map((r) => (
-            <li key={r.id} className="flex items-center gap-3 min-h-[44px]">
-              <span className="text-xs font-semibold uppercase text-gray-400 w-16 shrink-0">
-                {r.time_block}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-medium truncate">{r.name}</p>
-                <p className="text-xs text-gray-400">
-                  {r.step_count} step{r.step_count !== 1 ? "s" : ""}
-                </p>
-              </div>
-              {(r.streak_days ?? 0) > 0 && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
-                  title={`${r.streak_days}-day streak`}
-                >
-                  🔥 {r.streak_days}
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => onOpen(r.id)}
+                className="flex w-full items-center gap-3 min-h-[44px] rounded-lg px-2 py-1 text-left transition hover:bg-gray-50 active:bg-gray-100 dark:hover:bg-gray-800/60 dark:active:bg-gray-800"
+                aria-label={`Open ${r.name} step list`}
+              >
+                <span className="text-xs font-semibold uppercase text-gray-400 w-16 shrink-0">
+                  {r.time_block}
                 </span>
-              )}
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{r.name}</p>
+                  <p className="text-xs text-gray-400">
+                    {r.step_count} step{r.step_count !== 1 ? "s" : ""}
+                  </p>
+                </div>
+                {(r.streak_days ?? 0) > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+                    title={`${r.streak_days}-day streak`}
+                  >
+                    🔥 {r.streak_days}
+                  </span>
+                )}
+                <svg
+                  className="h-4 w-4 shrink-0 text-gray-300 dark:text-gray-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </button>
             </li>
           ))}
         </ul>
@@ -208,6 +244,8 @@ function ListsWidget({ lists }: { lists: DashboardData["active_lists"] }) {
 export default function DashboardHome() {
   const householdId = useHouseholdStore((s) => s.householdId);
   const { modulesEnabled, timeFormat } = useHouseholdSettings();
+  const queryClient = useQueryClient();
+  const [openRoutine, setOpenRoutine] = useState<Routine | null>(null);
 
   const { data, isLoading, isError } = useQuery<DashboardData>({
     queryKey: ["dashboard", householdId],
@@ -218,6 +256,23 @@ export default function DashboardHome() {
     enabled: !!householdId,
     refetchInterval: 60_000,
   });
+
+  // Lazy-fetch a full Routine (with steps) when the user taps a row in
+  // the home-screen RoutinesWidget so we can hand it to RoutineStepper
+  // without changing the dashboard payload shape.
+  const handleOpenRoutine = async (routineId: string) => {
+    const cached = queryClient.getQueryData<Routine>([
+      "routine",
+      routineId,
+    ]);
+    if (cached) {
+      setOpenRoutine(cached);
+      return;
+    }
+    const res = await routinesApi.getOne(routineId);
+    queryClient.setQueryData(["routine", routineId], res.data);
+    setOpenRoutine(res.data);
+  };
 
   const showAgenda = modulesEnabled.calendar;
   const showSidebar =
@@ -302,7 +357,10 @@ export default function DashboardHome() {
                 <>
                   {modulesEnabled.weather && <WeatherWidget />}
                   {modulesEnabled.routines && (
-                    <RoutinesWidget routines={data?.active_routines ?? []} />
+                    <RoutinesWidget
+                      routines={data?.active_routines ?? []}
+                      onOpen={handleOpenRoutine}
+                    />
                   )}
                   {modulesEnabled.meals && (
                     <MealsWidget meals={data?.today_meals ?? []} />
@@ -317,6 +375,17 @@ export default function DashboardHome() {
             </aside>
           )}
         </div>
+      )}
+
+      {openRoutine && (
+        <RoutineStepper
+          routine={openRoutine}
+          onClose={() => {
+            setOpenRoutine(null);
+            queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+            queryClient.invalidateQueries({ queryKey: ["routines-today"] });
+          }}
+        />
       )}
     </div>
   );

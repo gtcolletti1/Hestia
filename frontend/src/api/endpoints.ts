@@ -5,6 +5,7 @@ import type {
   Routine,
   RoutineStep,
   RoutineCompletion,
+  TodayCompletion,
   RoutineTemplate,
   TaskList,
   ListItem,
@@ -166,6 +167,14 @@ export const routines = {
       total_completions: number;
     }>(`/routines/${routineId}/streak`, {
       params: { profile_id: profileId },
+    }),
+
+  todayCompletions: (
+    householdId: string,
+    params?: { profile_id?: string },
+  ) =>
+    client.get<TodayCompletion[]>("/routines/today/completions", {
+      params: { household_id: householdId, ...params },
     }),
 
   getActive: (

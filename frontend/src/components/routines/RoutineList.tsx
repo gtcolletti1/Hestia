@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { routines as routinesApi, routineOverrides as overridesApi, type RoutineOverride } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import { useAuthStore } from "@/stores/authStore";
-import type { Routine, RoutineStep, RoutineTemplate } from "@/types";
+import type { Routine, RoutineStep, RoutineTemplate, TodayCompletion } from "@/types";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import EmptyState from "@/components/shared/EmptyState";
 import Modal from "@/components/shared/Modal";
@@ -161,6 +161,31 @@ export default function RoutineList() {
     },
   });
 
+  // Today's completion snapshot for every routine, so cards can render a
+  // "Done today" badge instead of looking like fresh untouched work.
+  // Unscoped (no profile_id) so household routines completed by anyone
+  // light up too.
+  const { data: todayCompletions = [] } = useQuery<TodayCompletion[]>({
+    queryKey: ["routines-today", householdId, "list"],
+    queryFn: async () =>
+      (await routinesApi.todayCompletions(householdId!)).data,
+    enabled: !!householdId,
+  });
+  const completionForRoutine = (routine: Routine): TodayCompletion | undefined => {
+    if (routine.profile_id) {
+      return todayCompletions.find(
+        (c) =>
+          c.routine_id === routine.id &&
+          c.profile_id === routine.profile_id &&
+          c.is_fully_completed,
+      );
+    }
+    // Unassigned (household) routine: any profile that finished it counts.
+    return todayCompletions.find(
+      (c) => c.routine_id === routine.id && c.is_fully_completed,
+    );
+  };
+
   const activeBlock = currentTimeBlock();
 
   const grouped = (["morning", "afternoon", "evening", "bedtime"] as TimeBlock[]).map(
@@ -179,6 +204,7 @@ export default function RoutineList() {
         onClose={() => {
           setSelectedRoutine(null);
           queryClient.invalidateQueries({ queryKey: ["routines"] });
+          queryClient.invalidateQueries({ queryKey: ["routines-today"] });
         }}
       />
     );
@@ -240,13 +266,16 @@ export default function RoutineList() {
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {blockRoutines.map((routine) => {
                 const profile = storeProfiles.find((p) => p.id === routine.profile_id);
+                const doneToday = completionForRoutine(routine);
                 return (
                   <div
                     key={routine.id}
                     className={`group relative flex cursor-pointer flex-col rounded-2xl border-2 bg-white p-4 shadow-sm transition hover:shadow-md active:scale-[0.98] dark:bg-gray-800 ${
-                      block === activeBlock && routine.is_active
-                        ? "border-blue-500 dark:border-blue-400"
-                        : "border-gray-200 dark:border-gray-700"
+                      doneToday
+                        ? "border-green-400 bg-green-50/50 dark:border-green-700 dark:bg-green-900/10"
+                        : block === activeBlock && routine.is_active
+                          ? "border-blue-500 dark:border-blue-400"
+                          : "border-gray-200 dark:border-gray-700"
                     }`}
                     onClick={() => setSelectedRoutine(routine)}
                     role="button"
@@ -332,6 +361,14 @@ export default function RoutineList() {
                           {routine.steps.length} step
                           {routine.steps.length !== 1 ? "s" : ""}
                         </span>
+                        {doneToday && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/30 dark:text-green-300"
+                            title="All applicable steps completed today"
+                          >
+                            ✅ Done today
+                          </span>
+                        )}
                         {routine.profile_id && (
                           <RoutineStreakBadge
                             routineId={routine.id}

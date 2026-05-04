@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { routines as routinesApi } from "@/api/endpoints";
 import { useHouseholdStore } from "@/stores/householdStore";
 import type { Routine, RoutineStep } from "@/types";
@@ -12,6 +12,7 @@ interface Props {
 
 export default function RoutineStepper({ routine, onClose }: Props) {
   const queryClient = useQueryClient();
+  const householdId = useHouseholdStore((s) => s.householdId);
   const profiles = useHouseholdStore((s) => s.profiles);
   const [selectedProfileId, setSelectedProfileId] = useState(
     routine.profile_id ?? profiles[0]?.id ?? "",
@@ -22,6 +23,26 @@ export default function RoutineStepper({ routine, onClose }: Props) {
   const todayWeekday = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
   const stepAppliesToday = (s: RoutineStep) =>
     !s.days_of_week || s.days_of_week.length === 0 || s.days_of_week.includes(todayWeekday);
+
+  // Pull today's completion for the selected profile so re-opening a
+  // partially or fully completed routine shows the existing checks
+  // instead of an empty list (the API already de-dupes credit, but the
+  // UI was lying about the state).
+  const { data: todaySnapshots = [] } = useQuery({
+    queryKey: ["routines-today", householdId, selectedProfileId],
+    queryFn: async () =>
+      (
+        await routinesApi.todayCompletions(householdId!, {
+          profile_id: selectedProfileId,
+        })
+      ).data,
+    enabled: !!householdId && !!selectedProfileId,
+  });
+  const todayForRoutine = todaySnapshots.find(
+    (t) => t.routine_id === routine.id,
+  );
+  const completedSet = new Set(todayForRoutine?.completed_step_ids ?? []);
+
   const [steps, setSteps] = useState<(RoutineStep & { completed: boolean })[]>(
     () =>
       [...routine.steps]
@@ -31,6 +52,20 @@ export default function RoutineStepper({ routine, onClose }: Props) {
   );
   const [showCelebration, setShowCelebration] = useState(false);
   const [earnedPoints, setEarnedPoints] = useState(0);
+
+  // Re-seed local checkbox state whenever the server snapshot or profile
+  // changes. We keep optimistic local toggles via setSteps in handleToggle;
+  // this effect just brings the truth back when the data settles.
+  useEffect(() => {
+    setSteps((prev) =>
+      prev.map((s) => ({ ...s, completed: completedSet.has(s.id) })),
+    );
+    const earned = routine.steps
+      .filter((s) => completedSet.has(s.id))
+      .reduce((sum, s) => sum + (s.points_value || 0), 0);
+    setEarnedPoints(earned);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayForRoutine?.completed_step_ids.join(","), selectedProfileId]);
 
   const completedCount = steps.filter((s) => s.completed).length;
   const totalCount = steps.length;
@@ -54,6 +89,7 @@ export default function RoutineStepper({ routine, onClose }: Props) {
         : routinesApi.uncompleteStep(routine.id, stepId, selectedProfileId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["routines"] });
+      queryClient.invalidateQueries({ queryKey: ["routines-today"] });
       queryClient.invalidateQueries({
         queryKey: ["routine-streak", routine.id],
       });

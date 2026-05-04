@@ -54,6 +54,14 @@ export interface RoutineCompletion {
   is_fully_completed: boolean;
 }
 
+export interface TodayCompletion {
+  routine_id: string;
+  profile_id: string;
+  completed_step_ids: string[];
+  applicable_step_ids: string[];
+  is_fully_completed: boolean;
+}
+
 export interface RoutineTemplateStep {
   label: string;
   icon?: string;
