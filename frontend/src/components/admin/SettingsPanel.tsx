@@ -226,24 +226,40 @@ export default function SettingsPanel() {
     }
   };
 
-  const [icalForm, setIcalForm] = useState<{
+  type IcalFormState = {
     open: boolean;
     name: string;
     url: string;
     error: string | null;
+    errorKind: "duplicate" | "generic" | null;
     submitting: boolean;
-  }>({ open: false, name: "", url: "", error: null, submitting: false });
+  };
+  const [icalForm, setIcalForm] = useState<IcalFormState>({
+    open: false,
+    name: "",
+    url: "",
+    error: null,
+    errorKind: null,
+    submitting: false,
+  });
 
   const submitIcal = async () => {
     if (!householdId) return;
-    setIcalForm((f) => ({ ...f, error: null, submitting: true }));
+    setIcalForm((f) => ({ ...f, error: null, errorKind: null, submitting: true }));
     try {
       const { data } = await integrationsApi.subscribeIcal({
         household_id: householdId,
         name: icalForm.name.trim(),
         ical_url: icalForm.url.trim(),
       });
-      setIcalForm({ open: false, name: "", url: "", error: null, submitting: false });
+      setIcalForm({
+        open: false,
+        name: "",
+        url: "",
+        error: null,
+        errorKind: null,
+        submitting: false,
+      });
       queryClient.invalidateQueries({ queryKey: ["integrations", "status"] });
       queryClient.invalidateQueries({ queryKey: ["events"] });
       // Toast: confirm preview event count
@@ -252,12 +268,29 @@ export default function SettingsPanel() {
       setTimeout(() => setShowSaved(false), 4000);
       console.info(`Subscribed: ${data.events_preview_count} events found`);
     } catch (err: unknown) {
-      const detail =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data
-          ?.detail ?? "Could not subscribe to that URL";
+      const response = (err as { response?: { status?: number; data?: { detail?: string } } })
+        ?.response;
+      const status = response?.status;
+      const detail = response?.data?.detail;
+      let message: string;
+      let kind: "duplicate" | "generic";
+      if (status === 409) {
+        message =
+          typeof detail === "string" && detail.length > 0
+            ? detail
+            : "This calendar is already connected to this household.";
+        kind = "duplicate";
+      } else {
+        message =
+          typeof detail === "string" && detail.length > 0
+            ? detail
+            : "Could not subscribe to that URL";
+        kind = "generic";
+      }
       setIcalForm((f) => ({
         ...f,
-        error: typeof detail === "string" ? detail : "Could not subscribe to that URL",
+        error: message,
+        errorKind: kind,
         submitting: false,
       }));
     }
@@ -802,7 +835,14 @@ export default function SettingsPanel() {
             <button
               type="button"
               onClick={() =>
-                setIcalForm({ open: true, name: "", url: "", error: null, submitting: false })
+                setIcalForm({
+                  open: true,
+                  name: "",
+                  url: "",
+                  error: null,
+                  errorKind: null,
+                  submitting: false,
+                })
               }
               className="rounded-lg px-3 py-2 text-xs font-medium min-h-[44px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 transition-colors whitespace-nowrap"
             >
@@ -896,8 +936,22 @@ export default function SettingsPanel() {
             />
 
             {icalForm.error && (
-              <div className="mb-3 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-2 text-sm">
-                {icalForm.error}
+              <div
+                className={
+                  icalForm.errorKind === "duplicate"
+                    ? "mb-3 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-700/50 px-3 py-2 text-sm"
+                    : "mb-3 rounded-lg bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 px-3 py-2 text-sm"
+                }
+                role={icalForm.errorKind === "duplicate" ? "status" : "alert"}
+              >
+                {icalForm.errorKind === "duplicate" ? (
+                  <>
+                    <strong className="font-semibold">Already connected. </strong>
+                    {icalForm.error}
+                  </>
+                ) : (
+                  icalForm.error
+                )}
               </div>
             )}
 
